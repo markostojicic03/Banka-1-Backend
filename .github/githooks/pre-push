@@ -175,10 +175,10 @@ echo "[3/3] Validating Docker build..."
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "  [WARN] Docker not found, skipping Docker build validation."
-elif [ ! -f "$REPO_ROOT/docker-compose.yml" ] && [ ! -f "$REPO_ROOT/docker-compose.yaml" ]; then
-  echo "  [WARN] No docker-compose.yml found at repo root, skipping."
+elif [ ! -f "$REPO_ROOT/setup/docker-compose.yml" ] && [ ! -f "$REPO_ROOT/setup/docker-compose.yaml" ]; then
+  echo "  [WARN] No docker-compose.yml found at setup/, skipping."
 else
-  (cd "$REPO_ROOT" && docker compose build --no-cache) \
+  (cd "$REPO_ROOT/setup" && docker compose build --no-cache) \
     || { echo ""; echo "[FAIL] Docker build failed. Push aborted."; exit 1; }
   echo "[3/3] Docker build passed."
 fi
