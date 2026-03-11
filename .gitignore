@@ -6,6 +6,32 @@
 build/
 out/
 
+# Maven
+target/
+
+# Node.js
+node_modules/
+dist/
+.npm/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Go
+bin/
+*.exe
+
+# .NET
+*/bin/
+*/obj/
+*.user
+*.suo
+
 # IDE - IntelliJ IDEA
 /.idea/
 *.iml
@@ -54,3 +80,6 @@ reports/
 *.bak
 *.swp
 *~
+
+# Misc
+*.pdf
