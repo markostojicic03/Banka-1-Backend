@@ -72,6 +72,9 @@ jobs:
       - name: Generate Gradle wrapper
         run: gradle wrapper --gradle-version=8.14
 
+      - name: Lint
+        run: ./gradlew :${{ matrix.service }}:checkstyleMain :${{ matrix.service }}:checkstyleTest --no-daemon --warning-mode none --console plain
+
       - name: Build
         run: ./gradlew :${{ matrix.service }}:build -x test --no-daemon --warning-mode none --console plain
 
@@ -134,7 +137,15 @@ jobs:
         run: |
           README="${{ matrix.service }}/README.md"
           FAILED=0
-
+          
+          grep -qi "^# " "$README" || {
+            echo "❌ ${{ matrix.service }}/README.md: missing top-level title."
+            FAILED=1
+          }
+          grep -q '```' "$README" || {
+            echo "❌ ${{ matrix.service }}/README.md: missing example code block."
+            FAILED=1
+          }
           grep -qi "docker.compose\|docker compose" "$README" || {
             echo "❌ ${{ matrix.service }}/README.md: missing Docker Compose instructions."
             FAILED=1
@@ -198,7 +209,34 @@ jobs:
       - name: Validate OpenAPI spec
         if: steps.skip-docs.outputs.skip != 'true' && steps.openapi-check.outputs.skip != 'true'
         run: |
-          redocly lint "${{ steps.openapi-check.outputs.spec }}"
+          SPEC="${{ steps.openapi-check.outputs.spec }}"
+          
+          grep -qi "^openapi:" "$SPEC" || {
+            echo "❌ OpenAPI spec missing 'openapi:' field."
+            exit 1
+          }
+          
+          grep -qi "^info:" "$SPEC" || {
+            echo "❌ OpenAPI spec missing 'info:' section."
+            exit 1
+          }
+          
+          grep -qi "^[[:space:]]*title:" "$SPEC" || {
+            echo "❌ OpenAPI spec missing 'title:' field."
+            exit 1
+          }
+          
+          grep -qi "^[[:space:]]*version:" "$SPEC" || {
+            echo "❌ OpenAPI spec missing 'version:' field."
+            exit 1
+          }
+          
+          grep -qi "^paths:" "$SPEC" || {
+            echo "❌ OpenAPI spec missing 'paths:' section."
+            exit 1
+          }
+          
+          redocly lint "$SPEC"
           echo "✅ OpenAPI spec is valid."
 
   # ── Docker Build Validation ───────────────────────────────────────────────
@@ -238,8 +276,24 @@ jobs:
       - name: Test Docker image runs
         if: steps.check.outputs.exists == 'true'
         run: |
-          echo "Running container test for ${{ matrix.service }}"
-          docker run --rm ci-test/${{ matrix.service }}:latest echo "✅ Docker image for ${{ matrix.service }} runs!"
+          echo "Starting container for ${{ matrix.service }}"
+          docker run -d --name ci-${{ matrix.service }} ci-test/${{ matrix.service }}:latest
+          sleep 15
+
+          STATUS=$(docker inspect -f '{{.State.Status}}' ci-${{ matrix.service }})
+          echo "Container status: $STATUS"
+
+          if [ "$STATUS" != "running" ]; then
+           echo "❌ Container for ${{ matrix.service }} is not running."
+           docker logs ci-${{ matrix.service }} || true
+           exit 1
+          fi
+
+          echo "✅ Docker image for ${{ matrix.service }} started successfully."
+      - name: Cleanup container
+        if: always() && steps.check.outputs.exists == 'true'
+        run: |
+          docker rm -f ci-${{ matrix.service }} >/dev/null 2>&1 || true
         
   # ── TODO: Docker Build & Push to Registry ────────────────────────────────
   # Configure once a container registry is available.
