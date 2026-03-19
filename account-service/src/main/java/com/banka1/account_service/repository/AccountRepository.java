@@ -1,6 +1,8 @@
 package com.banka1.account_service.repository;
 
 import com.banka1.account_service.domain.Account;
+import com.banka1.account_service.domain.enums.CardStatus;
+import com.banka1.account_service.domain.enums.Status;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -13,6 +15,11 @@ import java.util.List;
 @Repository
 public interface AccountRepository extends JpaRepository<Account,Long> {
     boolean existsByBrojRacuna(String brojRacuna);
+
+    Page<Account> findByVlasnikAndStatus(Long id, Status status, Pageable pageable);
+
+
+
     @Query("""
     SELECT a
     FROM Account a

@@ -3,6 +3,7 @@ package com.banka1.account_service.service.implementation;
 import com.banka1.account_service.domain.*;
 import com.banka1.account_service.domain.Currency;
 import com.banka1.account_service.domain.enums.AccountOwnershipType;
+import com.banka1.account_service.domain.enums.CardStatus;
 import com.banka1.account_service.domain.enums.CurrencyCode;
 import com.banka1.account_service.domain.enums.Status;
 import com.banka1.account_service.dto.request.CheckingDto;
@@ -151,11 +152,10 @@ public class EmployeeServiceImplementation implements EmployeeService {
         account.setZaposlen(((Number) jwt.getClaim(appPropertiesId)).longValue());
         account.setDatumIVremeKreiranja(LocalDateTime.now());
         account.setCurrency(currency);
-        account.setStatus(Status.ACTIVE);
         account.setCompany(company);
     }
 
-
+    //todo rabit mq
     @Transactional
     @Override
     public String createFxAccount(Jwt jwt, FxDto fxDto) {
@@ -170,6 +170,7 @@ public class EmployeeServiceImplementation implements EmployeeService {
         return "Uspesno kreiran fx account";
     }
 
+    //todo rabit mq
     @Transactional
     @Override
     public String createCheckingAccount(Jwt jwt, CheckingDto checkingDto) {
@@ -184,33 +185,20 @@ public class EmployeeServiceImplementation implements EmployeeService {
         return "Uspesno kreiran checking account";
     }
 
-    public Page<AccountSearchResponseDto> searchAllAccounts(
-            Jwt jwt,
-            String ime,
-            String prezime,
-            String accountNumber,
-            int page,
-            int size
-    ) {
-        Page<ClientResponseDto> clientPage =
-                clientServiceClient.searchClients(ime, prezime, page, size);
-
+    @Transactional
+    public Page<AccountSearchResponseDto> searchAllAccounts(Jwt jwt,String ime,String prezime,String accountNumber,int page,int size)
+    {
+        Page<ClientResponseDto> clientPage = clientServiceClient.searchClients(ime, prezime, page, size);
         List<ClientResponseDto> clients = clientPage.getContent();
-
         if (clients.isEmpty()) {
             return Page.empty();
         }
-
-        // mapiranje id -> client
-        Map<Long, ClientResponseDto> clientMap =
-                clients.stream().collect(Collectors.toMap(ClientResponseDto::getId, c -> c));
-
+        Map<Long, ClientResponseDto> clientMap = clients.stream().collect(Collectors.toMap(ClientResponseDto::getId, c -> c));
         Page<Account> accounts = accountRepository.searchAccounts(
                 accountNumber,
                 clients.stream().map(ClientResponseDto::getId).toList(),
                 PageRequest.of(page, size)
         );
-
         List<AccountSearchResponseDto> dtos = accounts.getContent().stream()
                 .map(acc -> {
                     ClientResponseDto client = clientMap.get(acc.getVlasnik());
@@ -223,8 +211,22 @@ public class EmployeeServiceImplementation implements EmployeeService {
         return new PageImpl<>(dtos, accounts.getPageable(), accounts.getTotalElements());
     }
 
+    //todo rabit mq
+    @Transactional
     @Override
     public String updateCard(Jwt jwt, Long id, UpdateCardDto updateCardDto) {
-        return "";
+//        Account account=accountRepository.findById(id).orElse(null);
+//        if(account==null)
+//            throw new IllegalArgumentException("Ne postoji racun sa tim id");
+//        if(!account.getVlasnik().equals(((Number) jwt.getClaim(appPropertiesId)).longValue()))
+//            throw new IllegalArgumentException("Nisi vlasnik racuna");
+//        if(account.getStatus()==updateCardDto.getCardStatus())
+//            throw new IllegalArgumentException("Kartica je vec "+account.getStatus().name());
+//        if(account.getStatus()==CardStatus.DEACTIVATED && updateCardDto.getCardStatus()==CardStatus.BLOCKED
+//            || account.getStatus()==CardStatus.BLOCKED && updateCardDto.getCardStatus()==CardStatus.ACTIVATED)
+//            throw new IllegalArgumentException("Ne moze "+account.getStatus().name()+" u "+updateCardDto.getCardStatus());
+//
+//        account.setStatus(updateCardDto.getCardStatus());
+        return "Uspesno updetovan status";
     }
 }

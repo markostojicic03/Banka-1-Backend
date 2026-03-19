@@ -10,6 +10,7 @@ import lombok.AllArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/client")
 @AllArgsConstructor
+@PreAuthorize("hasRole('CLIENT_BASIC')")
 //todo dodati autorizaciju na endpointe
 public class ClientController {
     private ClientService clientService;
@@ -51,6 +53,7 @@ public class ClientController {
         return new ResponseEntity<>(clientService.editAccountName(jwt,id,editAccountNameDto), HttpStatus.OK);
     }
     //todo samo vlasnik racuna, znaci nema autorizacije vrv samo menjas za sebe a ne exposujes endpoint da neko moze za nekog drugog
+    //todo dodaj verifikaciju preko mobilnog
     @PatchMapping("/accounts/{id}/limit")
     public ResponseEntity<String> editAccountLimit(@AuthenticationPrincipal Jwt jwt,@PathVariable Long id,@RequestBody @Valid EditAccountLimitDto editAccountLimitDto)
     {
