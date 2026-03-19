@@ -4,6 +4,10 @@ upstream user_service {
     server user-service:${SERVER_PORT};
 }
 
+upstream client_service {
+    server client-service:${CLIENT_SERVICE_PORT};
+}
+
 server {
     # The gateway listens on port 80 - standard HTTP
     listen 80;
@@ -33,6 +37,15 @@ server {
 
     location /v3/api-docs {
         proxy_pass http://user_service;
+    }
+
+    # ---------------------------------------------------------
+    # CLIENT SERVICE  (all routes prefixed with /clients/)
+    # Strip the /clients prefix before forwarding
+    # ---------------------------------------------------------
+
+    location /clients/ {
+        proxy_pass http://client_service/;
     }
 
     # Health check

@@ -45,6 +45,29 @@ services:
       timeout: 5s
       retries: 10
 
+  # Postgres for Client Service
+  postgres_client:
+    image: postgres:16
+    container_name: postgres_client_db
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${CLIENT_SERVICE_DB_NAME:-clientdb}
+      POSTGRES_USER: ${CLIENT_SERVICE_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${CLIENT_SERVICE_DB_PASSWORD:-postgres}
+    ports:
+      - "${CLIENT_SERVICE_DB_EX_PORT:-5435}:5432"
+    volumes:
+      - postgres-client-data:/var/lib/postgresql/data
+    networks:
+      - banka-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${CLIENT_SERVICE_DB_USER:-postgres} -d ${CLIENT_SERVICE_DB_NAME:-clientdb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   # RabbitMQ (shared)
   rabbitmq:
     image: rabbitmq:3-management
@@ -66,6 +89,60 @@ services:
       timeout: 5s
       retries: 10
 
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    container_name: banka_otel_collector
+    restart: unless-stopped
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel/config.yaml:ro
+    expose:
+      - "4318"
+      - "8889"
+    depends_on:
+      - jaeger
+    networks:
+      - banka-network
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: banka_jaeger
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    expose:
+      - "4317"
+    ports:
+      - "16686:16686"
+    networks:
+      - banka-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: banka_prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    networks:
+      - banka-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: banka_grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - banka-network
+
   # Notification Service
   notification-service:
     build:
@@ -77,21 +154,31 @@ services:
       - .env
     environment:
       NOTIFICATION_SERVICE_HOST: ${NOTIFICATION_SERVICE_HOST:-0.0.0.0}
-      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres_notification}
       POSTGRES_DB: ${POSTGRES_DB:-notification_db}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       RABBITMQ_HOST: ${RABBITMQ_HOST:-rabbitmq}
       RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
+      MANAGEMENT_OTLP_METRICS_EXPORT_URL: http://otel-collector:4318/v1/metrics
+      MANAGEMENT_OTLP_TRACING_ENDPOINT: http://otel-collector:4318/v1/traces
     depends_on:
       postgres_notification:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      otel-collector:
+        condition: service_started
     expose:
       - "${NOTIFICATION_SERVICE_PORT:-8006}"
     networks:
       - banka-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:${NOTIFICATION_SERVICE_PORT:-8006}/actuator/health/liveness || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   # User Service
   user-service:
@@ -111,15 +198,58 @@ services:
       RABBIT_HOST: ${RABBITMQ_HOST:-rabbitmq}
       RABBIT_PORT: ${RABBITMQ_PORT:-5672}
       SERVER_PORT: ${SERVER_PORT:-8081}
+      MANAGEMENT_OTLP_METRICS_EXPORT_URL: http://otel-collector:4318/v1/metrics
+      MANAGEMENT_OTLP_TRACING_ENDPOINT: http://otel-collector:4318/v1/traces
     depends_on:
       postgres_user:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      otel-collector:
+        condition: service_started
     expose:
       - "${SERVER_PORT:-8081}"
     networks:
       - banka-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:${SERVER_PORT:-8081}/actuator/health/liveness || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # Client Service
+  client-service:
+    build:
+      context: ..
+      dockerfile: client-service/Dockerfile
+    container_name: banka_client_service
+    restart: on-failure
+    env_file:
+      - .env
+    environment:
+      CLIENT_SERVICE_DB_HOST: postgres_client
+      RABBITMQ_HOST: ${RABBITMQ_HOST:-rabbitmq}
+      RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
+      MANAGEMENT_OTLP_METRICS_EXPORT_URL: http://otel-collector:4318/v1/metrics
+      MANAGEMENT_OTLP_TRACING_ENDPOINT: http://otel-collector:4318/v1/traces
+    depends_on:
+      postgres_client:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    expose:
+      - "${CLIENT_SERVICE_PORT:-8083}"
+    networks:
+      - banka-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:${CLIENT_SERVICE_PORT:-8083}/actuator/health/liveness || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   api-gateway:
     build:
@@ -133,8 +263,15 @@ services:
       - .env
     depends_on:
       - user-service
+      - client-service
     networks:
       - banka-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost/gateway-health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
 networks:
   banka-network:
@@ -143,3 +280,5 @@ networks:
 volumes:
   postgres-notification-data:
   postgres-user-data:
+  postgres-client-data:
+  grafana-data:
