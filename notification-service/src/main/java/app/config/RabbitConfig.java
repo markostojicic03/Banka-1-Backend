@@ -17,13 +17,11 @@ import org.springframework.context.annotation.Configuration;
  * <ul>
  *     <li>A `TOPIC` exchange that receives employee events</li>
  *     <li>A durable `QUEUE` consumed by this service</li>
- *     <li>A BINDING between exchange and queue
- *     using a routing-key pattern</li>
+ *     <li>A BINDING between exchange and queue using a routing-key pattern</li>
  *     <li>A JSON message converter for request payloads</li>
  * </ul>
  *
- * <p>All names come from application.properties
- *    so values can change per environment.
+ * <p>All names come from application.properties so values can change per environment.
  */
 @Configuration
 public class RabbitConfig {

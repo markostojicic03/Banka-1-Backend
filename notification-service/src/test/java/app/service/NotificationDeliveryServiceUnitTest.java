@@ -48,7 +48,12 @@ import static org.mockito.Mockito.when;
 /**
  * Unit tests for {@link NotificationDeliveryService}.
  *
- * <p>These tests validate DB state transitions and retry scheduling logic.
+ * <p>These tests validate delivery lifecycle behavior inside notification-service:
+ * unsupported routing-key handling, pending-delivery creation, retry scheduling,
+ * recovery from transient failures, and terminal failure scenarios.
+ *
+ * <p>The goal is to protect the orchestration layer that sits between incoming
+ * RabbitMQ events, template rendering, persistence, and actual email sending.
  */
 @ExtendWith(MockitoExtension.class)
 class NotificationDeliveryServiceUnitTest {
@@ -167,82 +172,44 @@ class NotificationDeliveryServiceUnitTest {
         }).when(notificationService).sendEmail(anyString(), anyString(), anyString());
     }
 
-//    @Test
-//    void handleIncomingMessageCreatesNewDeliveryAndMarksSucceededOnSendSuccess() {
-//        NotificationRequest request = new NotificationRequest("Dimitrije", TEST_EMAIL, Map.of("subject", "Hello", "body", "Body"));
-//        when(notificationService.resolveEmailContent(request, NotificationType.EMPLOYEE_CREATED))
-//                .thenReturn(new ResolvedEmail(TEST_EMAIL, "Hello", "Body"));
-//
-//        runHandleIncomingMessageInTransaction(
-//                () -> notificationDeliveryService.handleIncomingMessage(
-//                        request,
-//                        NotificationType.EMPLOYEE_CREATED
-//                )
-//        );
-//
-//        verify(notificationService).sendEmail(TEST_EMAIL, "Hello", "Body");
-//        ArgumentCaptor<NotificationDelivery> deliveryCaptor = ArgumentCaptor.forClass(NotificationDelivery.class);
-//        verify(notificationDeliveryTxService).createPendingDelivery(deliveryCaptor.capture());
-//
-//        NotificationDelivery created = deliveryCaptor.getValue();
-//        assertNotNull(created.getDeliveryId());
-//        assertEquals(NotificationType.EMPLOYEE_CREATED, created.getNotificationType());
-//        assertEquals(NotificationDeliveryStatus.PENDING, createdStatusesById.get(created.getDeliveryId()));
-//
-//        NotificationDelivery finalSaved = deliveriesById.get(created.getDeliveryId());
-//        assertEquals(NotificationDeliveryStatus.SUCCEEDED, finalSaved.getStatus());
-//        assertEquals(1, finalSaved.getRetryCount());
-//        assertNotNull(finalSaved.getSentAt());
-//        verify(notificationDeliveryTxService).markSucceeded(eq(created.getDeliveryId()), any(Instant.class));
-//    }
+    /**
+     * Verifies that a mail authentication failure becomes a terminal failed delivery without
+     * scheduling a retry.
+     *
+     * <p>This test covers the non-retryable failure path after transaction commit. The delivery
+     * should still be created as pending first, but once the actual send attempt throws
+     * {@link MailAuthenticationException}, the record must end in {@code FAILED} and no retry
+     * task should be queued.
+     */
+    @Test
+    void handleIncomingMessageMarksDeliveryFailedWithoutRetryOnMailAuthenticationException() {
+        NotificationRequest request = new NotificationRequest("Dimitrije", TEST_EMAIL, Map.of());
+        when(notificationService.resolveEmailContent(request, NotificationType.EMPLOYEE_CREATED))
+                .thenReturn(new ResolvedEmail(TEST_EMAIL, "Hello", "Body"));
+        doThrow(new MailAuthenticationException("Authentication failed"))
+                .when(notificationService).sendEmail(TEST_EMAIL, "Hello", "Body");
 
-//    @Test
-//    void handleIncomingMessageThrowsExceptionOnSendFailure() {
-//        NotificationRequest request = new NotificationRequest("Dimitrije", TEST_EMAIL, Map.of("subject", "Hello", "body", "Body"));
-//        when(notificationService.resolveEmailContent(request, NotificationType.EMPLOYEE_CREATED))
-//                .thenReturn(new ResolvedEmail(TEST_EMAIL, "Hello", "Body"));
-//        doThrow(new IllegalStateException("SMTP unavailable"))
-//                .when(notificationService).sendEmail(TEST_EMAIL, "Hello", "Body");
-//
-//        runHandleIncomingMessageInTransaction(
-//                () -> notificationDeliveryService.handleIncomingMessage(request, NotificationType.EMPLOYEE_CREATED)
-//        );
-//
-//        ArgumentCaptor<NotificationDelivery> deliveryCaptor = ArgumentCaptor.forClass(NotificationDelivery.class);
-//        verify(notificationDeliveryTxService).createPendingDelivery(deliveryCaptor.capture());
-//        NotificationDelivery finalSaved = deliveriesById.get(deliveryCaptor.getValue().getDeliveryId());
-//
-//        assertEquals(NotificationDeliveryStatus.RETRY_SCHEDULED, finalSaved.getStatus());
-//        assertEquals(1, finalSaved.getRetryCount());
-//        assertNotNull(finalSaved.getNextAttemptAt());
-//        assertNotNull(finalSaved.getLastAttemptAt());
-//        assertEquals(5, finalSaved.getNextAttemptAt().getEpochSecond() - finalSaved.getLastAttemptAt().getEpochSecond());
-//
-//        verify(retryTaskQueue).schedule(finalSaved.getDeliveryId(), finalSaved.getNextAttemptAt());
-//    }
+        runHandleIncomingMessageAndCommit(
+                () -> notificationDeliveryService.handleIncomingMessage(request, NotificationType.EMPLOYEE_CREATED)
+        );
 
+        ArgumentCaptor<NotificationDelivery> deliveryCaptor = ArgumentCaptor.forClass(NotificationDelivery.class);
+        verify(notificationDeliveryTxService).createPendingDelivery(deliveryCaptor.capture());
+        NotificationDelivery finalSaved = deliveriesById.get(deliveryCaptor.getValue().getDeliveryId());
 
-//    @Test
-//    void handleIncomingMessageFailsImmediatelyOnMailAuthenticationException() {
-//        NotificationRequest request = new NotificationRequest("Dimitrije", TEST_EMAIL, Map.of("subject", "Hello", "body", "Body"));
-//        when(notificationService.resolveEmailContent(request, NotificationType.EMPLOYEE_CREATED))
-//                .thenReturn(new ResolvedEmail(TEST_EMAIL, "Hello", "Body"));
-//        doThrow(new MailAuthenticationException("Authentication failed"))
-//                .when(notificationService).sendEmail(TEST_EMAIL, "Hello", "Body");
-//
-//        runHandleIncomingMessageInTransaction(
-//                () -> notificationDeliveryService.handleIncomingMessage(request, NotificationType.EMPLOYEE_CREATED)
-//        );
-//
-//        ArgumentCaptor<NotificationDelivery> deliveryCaptor = ArgumentCaptor.forClass(NotificationDelivery.class);
-//        verify(notificationDeliveryTxService).createPendingDelivery(deliveryCaptor.capture());
-//        NotificationDelivery finalSaved = deliveriesById.get(deliveryCaptor.getValue().getDeliveryId());
-//
-//        assertEquals(NotificationDeliveryStatus.FAILED, finalSaved.getStatus());
-//        assertEquals(1, finalSaved.getRetryCount());
-//        verify(retryTaskQueue, never()).schedule(any(), any());
-//    }
+        assertEquals(NotificationDeliveryStatus.FAILED, finalSaved.getStatus());
+        assertEquals(1, finalSaved.getRetryCount());
+        assertNull(finalSaved.getNextAttemptAt());
+        verify(retryTaskQueue, never()).schedule(any(), any());
+    }
 
+    /**
+     * Verifies that a null payload is rejected before the service enters delivery persistence or
+     * send logic.
+     *
+     * <p>This protects the orchestration layer from creating audit or delivery records for a
+     * completely missing message body.
+     */
     @Test
     void handleIncomingMessagePersistsFailedAuditWhenPayloadIsInvalid() {
         assertThrows(BusinessException.class, () ->
@@ -253,6 +220,11 @@ class NotificationDeliveryServiceUnitTest {
         verify(notificationService, never()).sendEmail(any(), any(), any());
     }
 
+    /**
+     * Verifies that an unknown routing key is stored as a failed audit and not processed further.
+     *
+     * <p>This is the consumer-side protection against unsupported events arriving from RabbitMQ.
+     */
     @Test
     void handleIncomingMessagePersistsFailedAuditWhenRoutingKeyIsUnsupported() {
         NotificationRequest request = new NotificationRequest("Dimitrije", TEST_EMAIL, Map.of());
@@ -270,6 +242,44 @@ class NotificationDeliveryServiceUnitTest {
         verify(notificationService, never()).sendEmail(any(), any(), any());
     }
 
+    /**
+     * Verifies that {@code employee.password_reset} is treated as a supported routing key.
+     *
+     * <p>This test checks the consumer-side contract with {@code user-service}. When that
+     * routing key arrives, notification-service must resolve it to
+     * {@link NotificationType#EMPLOYEE_PASSWORD_RESET} and continue into the normal delivery
+     * creation flow instead of storing a failed audit with "unsupported routing key".
+     *
+     * <p>The reason for this test is the earlier mismatch between underscore and dot routing-key
+     * variants, which broke password-reset notifications across services.
+     */
+    @Test
+    void handleIncomingMessageAcceptsEmployeePasswordResetRoutingKeyFromUserService() {
+        NotificationRequest request = new NotificationRequest(
+                "Dimitrije",
+                TEST_EMAIL,
+                Map.of("resetLink", "https://example.com/reset/123")
+        );
+        when(routingKeysMap.get("employee.password_reset"))
+                .thenReturn(NotificationType.EMPLOYEE_PASSWORD_RESET);
+        when(notificationService.resolveEmailContent(request, NotificationType.EMPLOYEE_PASSWORD_RESET))
+                .thenReturn(new ResolvedEmail(TEST_EMAIL, "Password Reset Email", "Body"));
+
+        runHandleIncomingMessageInTransaction(
+                () -> notificationDeliveryService.handleIncomingMessage(request, "employee.password_reset")
+        );
+
+        verify(notificationDeliveryTxService, never()).persistFailedAudit(any());
+        verify(notificationService).resolveEmailContent(request, NotificationType.EMPLOYEE_PASSWORD_RESET);
+        verify(notificationDeliveryTxService).createPendingDelivery(any(NotificationDelivery.class));
+    }
+
+    /**
+     * Verifies that a due retry task loads the delivery from persistence and completes it
+     * successfully when sending succeeds.
+     *
+     * <p>This protects the core retry worker path for already-persisted deliveries.
+     */
     @Test
     void processDueRetriesLoadsFromDbAndMarksSucceededWhenTaskIsDue() {
         Instant now = Instant.now();
@@ -295,6 +305,11 @@ class NotificationDeliveryServiceUnitTest {
         assertEquals(NotificationDeliveryStatus.SUCCEEDED, deliveriesById.get("delivery-1").getStatus());
     }
 
+    /**
+     * Verifies that the retry worker does nothing when the next queued task is not due yet.
+     *
+     * <p>This prevents premature sends and unnecessary repository work.
+     */
     @Test
     void processDueRetriesDoesNothingWhenNextTaskIsNotDueYet() {
         Instant future = Instant.now().plusSeconds(30);
@@ -307,6 +322,13 @@ class NotificationDeliveryServiceUnitTest {
         verify(notificationService, never()).sendEmail(any(), any(), any());
     }
 
+    /**
+     * Verifies that a retry task is rescheduled when the latest database state moved the delivery
+     * into the future.
+     *
+     * <p>This protects the in-memory retry queue from racing ahead of the persisted retry
+     * schedule.
+     */
     @Test
     void processDueRetriesReschedulesTaskWhenDatabaseStateWasMovedIntoFuture() {
         Instant now = Instant.now();
@@ -332,6 +354,13 @@ class NotificationDeliveryServiceUnitTest {
         verify(notificationService, never()).sendEmail(any(), any(), any());
     }
 
+    /**
+     * Verifies that the final allowed failed retry attempt marks the delivery as terminally
+     * failed instead of scheduling another retry.
+     *
+     * <p>This test protects the configured retry budget and the transition to a terminal failed
+     * state.
+     */
     @Test
     void processDueRetriesMarksDeliveryFailedWhenRetryBudgetIsExhausted() {
         Instant now = Instant.now();
@@ -363,6 +392,11 @@ class NotificationDeliveryServiceUnitTest {
         verify(retryTaskQueue, never()).schedule("delivery-1", now.minusSeconds(1));
     }
 
+    /**
+     * Verifies that retry processing quietly skips tasks whose delivery record no longer exists.
+     *
+     * <p>This keeps the retry worker robust against stale in-memory tasks.
+     */
     @Test
     void processDueRetriesSkipsMissingDeliveryRecord() {
         Instant now = Instant.now();
@@ -380,6 +414,12 @@ class NotificationDeliveryServiceUnitTest {
         );
     }
 
+    /**
+     * Verifies that startup reload enqueues only deliveries that are still eligible for retry.
+     *
+     * <p>This protects recovery behavior after service restart by excluding already exhausted
+     * records from the retry queue.
+     */
     @Test
     void loadRetryTasksOnStartupQueuesOnlyRetryableRecords() {
         NotificationDelivery retryable = new NotificationDelivery();
@@ -414,6 +454,12 @@ class NotificationDeliveryServiceUnitTest {
         verify(retryTaskQueue, atLeastOnce()).schedule(org.mockito.ArgumentMatchers.eq("delivery-pending"), any(Instant.class));
     }
 
+    /**
+     * Verifies that a null routing key is treated like any other unsupported event and persisted
+     * as a failed audit record.
+     *
+     * <p>This protects the service from malformed broker metadata.
+     */
     @Test
     void handleIncomingMessageWithNullRoutingKeyPersistsFailedAudit() {
         NotificationRequest request = new NotificationRequest("Dimitrije", TEST_EMAIL, Map.of());
@@ -429,6 +475,12 @@ class NotificationDeliveryServiceUnitTest {
         verify(notificationService, never()).sendEmail(any(), any(), any());
     }
 
+    /**
+     * Verifies that template/content resolution failures abort processing before a failed audit or
+     * send attempt is created.
+     *
+     * <p>This distinguishes invalid content-generation errors from runtime delivery errors.
+     */
     @Test
     void handleIncomingMessagePersistsFailedAuditWhenContentResolutionThrows() {
         NotificationRequest request = new NotificationRequest("Dimitrije", TEST_EMAIL, Map.of());
@@ -445,6 +497,11 @@ class NotificationDeliveryServiceUnitTest {
         verify(notificationService, never()).sendEmail(any(), any(), any());
     }
 
+    /**
+     * Verifies that startup validation rejects an invalid retry budget of zero.
+     *
+     * <p>This protects the service from booting with nonsensical retry configuration.
+     */
     @Test
     void validateRetryConfigThrowsWhenMaxRetriesIsZero() {
         ReflectionTestUtils.setField(notificationDeliveryService, "defaultMaxRetries", 0);
@@ -453,6 +510,11 @@ class NotificationDeliveryServiceUnitTest {
                 () -> notificationDeliveryService.validateRetryConfig());
     }
 
+    /**
+     * Verifies that startup validation rejects a retry delay of zero seconds.
+     *
+     * <p>This prevents an invalid tight-loop retry configuration at application startup.
+     */
     @Test
     void validateRetryConfigThrowsWhenDelaySecondsIsZero() {
         ReflectionTestUtils.setField(notificationDeliveryService, "retryDelaySeconds", 0);
@@ -461,6 +523,12 @@ class NotificationDeliveryServiceUnitTest {
                 () -> notificationDeliveryService.validateRetryConfig());
     }
 
+    /**
+     * Verifies that startup reload paginates through multiple result pages for both pending and
+     * scheduled deliveries.
+     *
+     * <p>This protects restart recovery logic when the backlog is larger than one page.
+     */
     @Test
     void loadRetryTasksOnStartupPaginatesThroughMultiplePages() {
         NotificationDelivery p1 = new NotificationDelivery();
@@ -506,6 +574,13 @@ class NotificationDeliveryServiceUnitTest {
         verify(retryTaskQueue).schedule("delivery-page2", p2.getNextAttemptAt());
     }
 
+    /**
+     * Verifies that exceptions thrown during retry sending are handled inside the retry worker
+     * without crashing the test flow.
+     *
+     * <p>This protects the processing loop from bubbling transient mail exceptions out of
+     * {@code processDueRetries()}.
+     */
     @Test
     void processDueRetriesThrowsExceptionWhenSendFails() {
         Instant now = Instant.now();
@@ -531,10 +606,39 @@ class NotificationDeliveryServiceUnitTest {
     }
 
 
+    /**
+     * Runs code with active transaction synchronization enabled.
+     *
+     * <p>This helper is needed because the service registers work to execute after transaction
+     * commit, and several unit tests need the same Spring transaction context assumptions as the
+     * real service methods.
+     *
+     * @param runnable callback executed inside the synthetic transaction-synchronization scope
+     */
     private void runHandleIncomingMessageInTransaction(Runnable runnable) {
         TransactionSynchronizationManager.initSynchronization();
         try {
             runnable.run();
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    /**
+     * Runs code with transaction synchronization enabled and then triggers registered
+     * {@code afterCommit} callbacks.
+     *
+     * <p>This helper is used for tests that need to observe behavior which only happens after the
+     * service commits the surrounding transaction, such as the actual email send attempt.
+     *
+     * @param runnable callback executed inside the synthetic transaction-synchronization scope
+     */
+    private void runHandleIncomingMessageAndCommit(Runnable runnable) {
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            runnable.run();
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(org.springframework.transaction.support.TransactionSynchronization::afterCommit);
         } finally {
             TransactionSynchronizationManager.clearSynchronization();
         }

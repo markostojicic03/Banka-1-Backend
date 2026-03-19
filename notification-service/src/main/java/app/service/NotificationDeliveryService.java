@@ -30,7 +30,28 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Orchestrates incoming delivery processing and database-backed retry lifecycle.
+ * Glavni servis koji vodi ceo tok obrade jedne notifikacije.
+ *
+ * <p>Ukratko, tok izgleda ovako:
+ * <ol>
+ *     <li>Stigne poruka sa RabbitMQ-a.</li>
+ *     <li>Na osnovu routing key-a odredi se tip notifikacije.</li>
+ *     <li>Proveri se da li je payload ispravan i da li moze da se napravi email.</li>
+ *     <li>Ako je sve ispravno, u bazi se pravi zapis sa statusom {@code PENDING}.</li>
+ *     <li>Tek nakon commit-a transakcije pokusava se stvarno slanje email-a.</li>
+ *     <li>Ako slanje uspe, zapis prelazi u {@code SUCCEEDED}.</li>
+ *     <li>Ako slanje ne uspe, zapis prelazi u {@code RETRY_SCHEDULED} ili {@code FAILED}.</li>
+ * </ol>
+ *
+ * <p>Bitna razlika:
+ * <ul>
+ *     <li>Ako greska nastane pre samog slanja email-a
+ *     (na primer los payload, nedostaje email ili ne postoji template),
+ *     email jos nije usao u delivery retry tok i u tim slucajevima se ovde ne kreira
+ *     {@code PENDING} zapis.</li>
+ *     <li>Ako greska nastane tek kada servis proba da posalje email,
+ *     zapis vec postoji u bazi i tada se update-uje status i po potrebi zakazuje retry.</li>
+ * </ul>
  */
 @Service
 @RequiredArgsConstructor
@@ -103,6 +124,14 @@ public class NotificationDeliveryService {
     /**
      * Handles a newly consumed RabbitMQ message using the raw routing key.
      *
+     * <p>Ovo je ulazna tacka za poruke koje dolaze sa broker-a.
+     * Prvo se proverava da li routing key moze da se mapira na poznat {@link NotificationType}.
+     * Ako ne moze, poruka se tretira kao nepodrzana i odmah se cuva failed audit zapis,
+     * bez pokusaja slanja.
+     *
+     * <p>Ako je routing key poznat, obrada se nastavlja dalje kroz validaciju payload-a,
+     * renderovanje email-a i eventualno slanje.
+     *
      * @param req incoming notification payload
      * @param routingKey routing key from RabbitMQ
      */
@@ -125,6 +154,9 @@ public class NotificationDeliveryService {
     /**
      * Handles a consumed RabbitMQ message after the notification type is known.
      *
+     * <p>Ova varijanta se uglavnom koristi interno i u testovima kada je tip notifikacije
+     * vec poznat i ne mora ponovo da se radi mapiranje iz routing key-a.
+     *
      * @param req incoming notification payload
      * @param notificationType type resolved from the RabbitMQ routing key
      */
@@ -141,6 +173,18 @@ public class NotificationDeliveryService {
      *
      * <p>IMPORTANT: this method never sends email directly. It only registers the
      * send attempt to run after the surrounding transaction commits successfully.
+     *
+     * <p>Drugim recima:
+     * <ul>
+     *     <li>ovde se proverava da li poruka ima smisla,</li>
+     *     <li>ovde se pravi finalni subject/body,</li>
+     *     <li>ovde se cuva novi delivery u bazi kao {@code PENDING},</li>
+     *     <li>ali se ovde jos ne salje email.</li>
+     * </ul>
+     *
+     * <p>Ako validacija padne ili email sadrzaj ne moze da se izrenderuje,
+     * metoda prekida obradu pre nego sto se napravi {@code PENDING} zapis.
+     * To znaci da takve greske ne ulaze u retry lifecycle koji koristi bazu.
      *
      * @param req incoming notification payload
      * @param notificationType resolved notification type
@@ -239,6 +283,11 @@ public class NotificationDeliveryService {
      * Persists a terminally failed record for invalid or unsupported incoming
      * messages.
      *
+     * <p>Ovaj zapis se koristi kada poruka ne moze ni da udje u normalan delivery tok.
+     * Na primer, kada stigne nepodrzan routing key. Tada nema smisla praviti
+     * {@code PENDING} delivery i cekati slanje, ali ipak zelimo trag u bazi da je
+     * takva poruka primljena i odbijena.
+     *
      * @param request incoming payload, which may be null or malformed
      * @param notificationType resolved or fallback notification type
      * @param error error reason stored with the delivery
@@ -281,7 +330,20 @@ public class NotificationDeliveryService {
     }
 
     /**
-     * Performs one immediate send attempt and updates persistence state accordingly.
+     * Performs 1 immediate send attempt and updates persistence state accordingly.
+     *
+     * <p>Do ove tacke dolazimo tek kada delivery vec postoji u bazi.
+     * To je vazno, jer sve greske koje nastanu ovde pripadaju "send" fazi,
+     * a ne "validation/render" fazi.
+     *
+     * <p>Ponasanje je sledece:
+     * <ul>
+     *     <li>ako slanje uspe, delivery ide u {@code SUCCEEDED},</li>
+     *     <li>ako padne autentikacija prema mail serveru, delivery se obelezava kao neuspesan
+     *     bez retry-a,</li>
+     *     <li>za ostale exception-e proverava se da li su retryable i po potrebi se
+     *     zakazuje sledeci pokusaj.</li>
+     * </ul>
      *
      * @param deliveryId internal delivery identifier
      */
@@ -306,8 +368,10 @@ public class NotificationDeliveryService {
             );
             notificationDeliveryTxService.markSucceeded(deliveryId, now);
         } catch (MailAuthenticationException e) {
-            // Non-retryable
-            notificationDeliveryTxService.markFailedOrRetry(deliveryId, now, trimError(e), false, retryDelaySeconds);
+            // Non-retryable greske
+            notificationDeliveryTxService.markFailedOrRetry(
+                    deliveryId, now, trimError(e), false, retryDelaySeconds
+            );
         } catch (Exception e) {
             boolean retryable = isRetryable(e);
             Instant nextAttempt = notificationDeliveryTxService.markFailedOrRetry(
@@ -366,7 +430,7 @@ public class NotificationDeliveryService {
     }
 
     /**
-     * Loads one status bucket page by page and enqueues recoverable records.
+     * Loads 1 status bucket page-by-page and enqueues recoverable records.
      *
      * @param status lifecycle status being reloaded
      * @param now current wall-clock timestamp used for pending records
@@ -424,6 +488,9 @@ public class NotificationDeliveryService {
     /**
      * Validates basic incoming payload shape.
      *
+     * <p>Ova validacija se desava pre nego sto delivery bude upisan kao {@code PENDING}.
+     * Zato greska iz ove metode znaci da email nije ni usao u fazu slanja.
+     *
      * @param request payload object from listener
      * @throws BusinessException if request is null
      */
@@ -435,6 +502,9 @@ public class NotificationDeliveryService {
 
     /**
      * Validates required notification type resolved from routing key.
+     *
+     * <p>I ova provera se desava pre kreiranja delivery zapisa za slanje.
+     * Ako nema validnog tipa notifikacije, nema ni smisla da delivery ulazi u retry tok.
      *
      * @param notificationType resolved notification type
      * @throws BusinessException if notificationType is null
@@ -461,6 +531,11 @@ public class NotificationDeliveryService {
 
     /**
      * Decides whether a failed send attempt should be retried.
+     *
+     * <p>Trenutna logika je namerno jednostavna:
+     * sve osim {@link MailAuthenticationException} tretira se kao retryable greska.
+     * To znaci da se klasifikacija jos ne deli detaljnije na
+     * "permanent recipient problem" i "privremeni provider problem".
      *
      * @param ex delivery failure thrown by the mail layer
      * @return {@code true} when the failure is considered transient

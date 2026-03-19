@@ -16,6 +16,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Unit tests for {@link DefaultNotificationTemplateFactory}.
+ *
+ * <p>This class verifies the map-backed variant of the template factory. The tests check that
+ * each supported employee notification type resolves to the expected template and that unknown
+ * types fail explicitly.
  */
 class DefaultNotificationTemplateFactoryUnitTest {
 
@@ -41,6 +45,11 @@ class DefaultNotificationTemplateFactoryUnitTest {
         factory = new DefaultNotificationTemplateFactory(templates);
     }
 
+    /**
+     * Verifies that the activation template is returned for employee creation events.
+     *
+     * <p>This protects the subject/body mapping for the onboarding notification type.
+     */
     @Test
     void resolveEmployeeCreatedReturnsActivationTemplate() {
         EmailTemplate template = factory.resolve(NotificationType.EMPLOYEE_CREATED);
@@ -50,6 +59,12 @@ class DefaultNotificationTemplateFactoryUnitTest {
         assertTrue(template.bodyTemplate().contains("{{name}}"));
     }
 
+    /**
+     * Verifies that the password-reset template is returned for employee reset events.
+     *
+     * <p>This ensures the reset-link placeholder and subject stay tied to the correct
+     * notification type.
+     */
     @Test
     void resolveEmployeePasswordResetReturnsResetTemplate() {
         EmailTemplate template = factory.resolve(NotificationType.EMPLOYEE_PASSWORD_RESET);
@@ -59,6 +74,12 @@ class DefaultNotificationTemplateFactoryUnitTest {
         assertTrue(template.bodyTemplate().contains("{{name}}"));
     }
 
+    /**
+     * Verifies that the deactivation template is returned for account-deactivation events.
+     *
+     * <p>This protects the final supported employee notification mapping in the template
+     * factory.
+     */
     @Test
     void resolveEmployeeAccountDeactivatedReturnsDeactivationTemplate() {
         EmailTemplate template = factory.resolve(NotificationType.EMPLOYEE_ACCOUNT_DEACTIVATED);
@@ -67,6 +88,12 @@ class DefaultNotificationTemplateFactoryUnitTest {
         assertTrue(template.bodyTemplate().contains("{{name}}"));
     }
 
+    /**
+     * Verifies that requesting an unsupported notification type fails explicitly.
+     *
+     * <p>This prevents the factory from masking missing configuration for unexpected event
+     * types.
+     */
     @Test
     void resolveUnknownNotificationTypeThrows() {
         BusinessException ex = assertThrows(
@@ -77,6 +104,12 @@ class DefaultNotificationTemplateFactoryUnitTest {
         assertTrue(ex.getDetails().contains("UNKNOWN"));
     }
 
+    /**
+     * Verifies that supported notification types do not accidentally share the same subject.
+     *
+     * <p>This is a compact regression check that the configured templates remain distinct per
+     * event type.
+     */
     @Test
     void allSupportedTypesReturnDistinctSubjects() {
         EmailTemplate created = factory.resolve(NotificationType.EMPLOYEE_CREATED);

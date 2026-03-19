@@ -44,7 +44,7 @@ final class NotificationContentResolver {
     }
 
     /**
-     * Resolves a notification payload into the final email recipient, subject, and body.
+     * Resolves a notification payload into the final `email recipient` + `subject` + `body`.
      *
      * @param request incoming notification payload
      * @param notificationType resolved notification type used for template selection

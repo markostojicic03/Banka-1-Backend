@@ -37,6 +37,16 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * Integration tests for retry behavior in {@link NotificationDeliveryService}.
+ *
+ * <p>This class verifies what happens after the initial notification send fails. It checks
+ * persistence state transitions, retry scheduling, repeated processing, and terminal failure
+ * behavior using a controlled in-memory mail sender.
+ *
+ * <p>The goal is to protect the delivery guarantees of notification-service when SMTP delivery
+ * is temporarily or repeatedly unavailable.
+ */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @TestPropertySource(properties = {
         "spring.rabbitmq.listener.simple.auto-startup=false",
@@ -69,6 +79,13 @@ class NotificationRetryIntegrationTest {
         controlledMailSender.reset();
     }
 
+    /**
+     * Verifies that one retryable send failure is persisted, scheduled, retried, and eventually
+     * marked as succeeded.
+     *
+     * <p>This test protects the core retry path where a transient SMTP error should not lose the
+     * notification but should be retried and completed successfully later.
+     */
     @Test
     void retryableFailureIsPersistedRetriedAndEventuallySucceeds() {
         controlledMailSender.failNext(new IllegalStateException("SMTP unavailable"));
@@ -106,6 +123,13 @@ class NotificationRetryIntegrationTest {
         assertEquals(1, controlledMailSender.sentCount());
     }
 
+    /**
+     * Verifies that repeated retryable failures eventually exhaust the retry budget and end in a
+     * terminal failed state.
+     *
+     * <p>This protects the service from retrying forever and confirms that delivery state is
+     * finalized cleanly once the configured maximum number of attempts is reached.
+     */
     @Test
     void retryableFailuresEventuallyExhaustRetryBudgetAndMarkDeliveryFailed() {
         controlledMailSender.failNext(new IllegalStateException("SMTP unavailable"));
@@ -145,6 +169,13 @@ class NotificationRetryIntegrationTest {
         assertEquals(0, controlledMailSender.sentCount());
     }
 
+    /**
+     * Forces the stored retry timestamp into the past so the retry worker can process it
+     * immediately.
+     *
+     * <p>This helper exists because production retry timing is time-based, but the test needs a
+     * deterministic way to trigger the next attempt without waiting for real time to pass.
+     */
     private void makeRetryDue(String deliveryId) {
         NotificationDelivery delivery = deliveryById(deliveryId);
         Instant dueNow = Instant.now().minusSeconds(1);
@@ -153,16 +184,37 @@ class NotificationRetryIntegrationTest {
         retryTaskQueue.schedule(deliveryId, dueNow);
     }
 
+    /**
+     * Returns the only persisted delivery and asserts that exactly one record exists.
+     *
+     * <p>The retry tests operate on a single notification flow, so multiple records would mean
+     * the scenario is no longer controlled.
+     */
     private NotificationDelivery singleDelivery() {
         List<NotificationDelivery> deliveries = notificationDeliveryRepository.findAll();
         assertEquals(1, deliveries.size());
         return deliveries.get(0);
     }
 
+    /**
+     * Loads a delivery by its internal identifier.
+     *
+     * <p>This helper keeps the assertions focused on business behavior instead of repository
+     * boilerplate.
+     */
     private NotificationDelivery deliveryById(String deliveryId) {
         return notificationDeliveryRepository.findByDeliveryId(deliveryId).orElseThrow();
     }
 
+    /**
+     * Polls until the expected asynchronous retry state is visible or the timeout expires.
+     *
+     * <p>The retry flow includes after-commit work and scheduled processing, so a polling helper
+     * keeps the integration assertions stable without relying on brittle fixed sleeps.
+     *
+     * @param timeout maximum time to wait
+     * @param condition condition that signals the expected retry state was reached
+     */
     private void waitForCondition(Duration timeout, java.util.function.BooleanSupplier condition) {
         Instant deadline = Instant.now().plus(timeout);
         while (Instant.now().isBefore(deadline)) {
@@ -179,6 +231,12 @@ class NotificationRetryIntegrationTest {
         throw new AssertionError("Condition not met within timeout: " + timeout);
     }
 
+    /**
+     * Test configuration that replaces the real SMTP sender with a controllable in-memory fake.
+     *
+     * <p>This allows the retry flow to be tested inside Spring without depending on an external
+     * mail server.
+     */
     @TestConfiguration
     static class MailTestConfiguration {
         @Bean
@@ -188,6 +246,12 @@ class NotificationRetryIntegrationTest {
         }
     }
 
+    /**
+     * In-memory mail sender that can fail selected attempts and record successful sends.
+     *
+     * <p>The retry tests use this component to simulate transient mail errors in a deterministic
+     * way while still exercising the real notification-service retry logic.
+     */
     static class ControlledMailSender implements JavaMailSender {
         private final AtomicInteger attempts = new AtomicInteger();
         private final Deque<RuntimeException> failures = new ArrayDeque<>();

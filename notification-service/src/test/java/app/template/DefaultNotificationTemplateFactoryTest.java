@@ -13,9 +13,20 @@ import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for {@link DefaultNotificationTemplateFactory}.
+ *
+ * <p>This class verifies the environment-backed template-loading variant of the factory. The
+ * tests make sure that templates can be read from configuration and that missing configuration
+ * fails with an explicit domain exception.
  */
 class DefaultNotificationTemplateFactoryTest {
 
+    /**
+     * Verifies that a template is returned when both subject and body are defined in the
+     * environment.
+     *
+     * <p>This protects property-based template loading, which is the configuration style used by
+     * the running service.
+     */
     @Test
     void resolveReturnsTemplateWhenDefined() {
         Environment environment = mock(Environment.class);
@@ -31,6 +42,13 @@ class DefaultNotificationTemplateFactoryTest {
         assertEquals("Test Body", template.bodyTemplate());
     }
 
+    /**
+     * Verifies that resolving a template fails with a clear business exception when the template
+     * is not configured.
+     *
+     * <p>This prevents silent fallback behavior that would hide broken notification
+     * configuration.
+     */
     @Test
     void resolveThrowsWhenTemplateNotDefined() {
         Environment environment = mock(Environment.class);

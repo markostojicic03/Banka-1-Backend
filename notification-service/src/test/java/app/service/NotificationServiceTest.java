@@ -21,6 +21,10 @@ import static org.mockito.Mockito.*;
 
 /**
  * Unit tests for {@link NotificationService}.
+ *
+ * <p>This class verifies the thin service-level behavior around mail sending and content
+ * resolution delegation. The tests protect the public service API that other parts of the
+ * notification flow use directly.
  */
 @ExtendWith(MockitoExtension.class)
 class NotificationServiceTest {
@@ -34,6 +38,12 @@ class NotificationServiceTest {
     @InjectMocks
     private NotificationService notificationService;
 
+    /**
+     * Verifies that {@link NotificationService#sendEmail(String, String, String)} forwards the
+     * prepared message to the configured mail sender.
+     *
+     * <p>This protects the final handoff point to the mail infrastructure.
+     */
     @Test
     void sendEmailSendsMessage() {
         doNothing().when(mailSender).send(any(SimpleMailMessage.class));
@@ -43,6 +53,12 @@ class NotificationServiceTest {
         verify(mailSender).send(any(SimpleMailMessage.class));
     }
 
+    /**
+     * Verifies that resolved email content comes from the configured template resolver flow.
+     *
+     * <p>This ensures the service returns the expected recipient, subject, and body after
+     * delegating template lookup to {@link NotificationTemplateFactory}.
+     */
     @Test
     void resolveEmailContentDelegatesToResolver() {
         NotificationRequest request = new NotificationRequest("name", "email", Map.of());

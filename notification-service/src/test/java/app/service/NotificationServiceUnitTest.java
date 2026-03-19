@@ -31,6 +31,8 @@ import static org.mockito.Mockito.verify;
  * Unit tests for {@link NotificationService}.
  *
  * <p>These tests use a mocked {@link JavaMailSender}; no real email is sent.
+ * They verify that the service builds outgoing mail correctly and that it delegates content
+ * resolution through the configured template factory for supported notification types.
  */
 @ExtendWith(MockitoExtension.class)
 class NotificationServiceUnitTest {
@@ -49,6 +51,13 @@ class NotificationServiceUnitTest {
     @InjectMocks
     private NotificationService notificationService;
 
+    /**
+     * Verifies that {@link NotificationService#sendEmail(String, String, String)} builds the
+     * expected {@link SimpleMailMessage} contents.
+     *
+     * <p>This protects the final email shape seen by the recipient, including recipient
+     * address, subject, and rendered body text.
+     */
     @Test
     void sendEmailBuildsExpectedEmailMessage() {
         notificationService.sendEmail(
@@ -66,6 +75,13 @@ class NotificationServiceUnitTest {
         assertEquals("Zdravo Dimitrije, vas nalog je kreiran. Aktivirajte nalog klikom na link:\nhttps://example.com/activate/123", sent.getText());
     }
 
+    /**
+     * Verifies that template variables are rendered into the email body for the requested
+     * notification type.
+     *
+     * <p>This ensures the service returns the fully resolved content that downstream delivery
+     * logic will persist and send.
+     */
     @Test
     void resolveEmailContentRendersTemplateForProvidedNotificationType() {
         NotificationRequest request = new NotificationRequest(
@@ -90,6 +106,11 @@ class NotificationServiceUnitTest {
         assertEquals("Zdravo Dimitrije, resetujte lozinku klikom na link:\nhttps://example.com/reset/123", resolved.body());
     }
 
+    /**
+     * Verifies that resolving email content fails when the recipient email is blank.
+     *
+     * <p>This protects the service from generating deliverable content for an invalid recipient.
+     */
     @Test
     void resolveEmailContentFailsWhenUserEmailMissing() {
         NotificationRequest request = new NotificationRequest("Dimitrije", "", Map.of("name", "Dimitrije"));
@@ -101,6 +122,12 @@ class NotificationServiceUnitTest {
         assertEquals(ErrorCode.RECIPIENT_EMAIL_REQUIRED, exception.getErrorCode());
     }
 
+    /**
+     * Verifies that resolving email content fails when the recipient email is null.
+     *
+     * <p>This complements the blank-email validation case and ensures missing recipient data is
+     * rejected consistently.
+     */
     @Test
     void resolveEmailContentFailsWhenUserEmailIsNull() {
         NotificationRequest request = new NotificationRequest("Dimitrije", null, Map.of("name", "Dimitrije"));
@@ -112,6 +139,12 @@ class NotificationServiceUnitTest {
         assertEquals(ErrorCode.RECIPIENT_EMAIL_REQUIRED, exception.getErrorCode());
     }
 
+    /**
+     * Verifies that a configured sender address is copied into the outgoing mail header.
+     *
+     * <p>This matters because SMTP configuration often requires a stable {@code From} address,
+     * and the service should honor it when present.
+     */
     @Test
     void sendEmailWithConfiguredFromAddressSetsFromHeader() {
         ReflectionTestUtils.setField(notificationService, "fromAddress", "sender@example.com");
@@ -123,6 +156,12 @@ class NotificationServiceUnitTest {
         assertEquals("sender@example.com", captor.getValue().getFrom());
     }
 
+    /**
+     * Verifies that no {@code From} header is set when the configured sender address is blank.
+     *
+     * <p>This prevents the service from writing meaningless empty header values into outgoing
+     * messages.
+     */
     @Test
     void sendEmailWithBlankFromAddressDoesNotSetFromHeader() {
         ReflectionTestUtils.setField(notificationService, "fromAddress", "");

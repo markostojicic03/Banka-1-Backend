@@ -15,7 +15,6 @@ import java.util.Map;
 public class NotificationConfig {
 
     @Bean
-    @ConfigurationProperties(prefix = "notification")
     public NotificationProperties notificationProperties() {
         return new NotificationProperties();
     }
