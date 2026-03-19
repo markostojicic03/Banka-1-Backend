@@ -25,7 +25,8 @@ WORKDIR /app
 COPY --from=builder /app/notification-service/build/libs/*.jar app.jar
 
 # Expose the service port
-EXPOSE 8006
+ARG SERVER_PORT=8006
+EXPOSE ${SERVER_PORT}
 
 # Run the application
 ENTRYPOINT ["java","-jar","app.jar"]

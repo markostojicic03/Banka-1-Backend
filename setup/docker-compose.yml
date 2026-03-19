@@ -150,6 +150,8 @@ services:
     build:
       context: ..
       dockerfile: notification-service/Dockerfile
+      args:
+        SERVER_PORT: ${NOTIFICATION_SERVER_PORT:-8006}
     container_name: notification-service
     restart: unless-stopped
     env_file:
@@ -194,6 +196,8 @@ services:
     build:
       context: ..
       dockerfile: user-service/Dockerfile
+      args:
+        SERVER_PORT: ${USER_SERVER_PORT:-8081}
     container_name: banka_user_service
     restart: unless-stopped
     env_file:
@@ -237,6 +241,8 @@ services:
     build:
       context: ..
       dockerfile: client-service/Dockerfile
+      args:
+        SERVER_PORT: ${CLIENT_SERVER_PORT:-8083}
     container_name: banka_client_service
     restart: unless-stopped
     env_file:
