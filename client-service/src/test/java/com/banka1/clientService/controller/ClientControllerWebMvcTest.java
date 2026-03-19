@@ -1,6 +1,7 @@
 package com.banka1.clientService.controller;
 
 import com.banka1.clientService.advice.GlobalExceptionHandler;
+import com.banka1.clientService.domain.enums.ClientRole;
 import com.banka1.clientService.domain.enums.Pol;
 import com.banka1.clientService.dto.requests.ClientCreateRequestDto;
 import com.banka1.clientService.dto.requests.ClientUpdateRequestDto;
@@ -201,7 +202,7 @@ class ClientControllerWebMvcTest {
 
     private ClientResponseDto sampleResponse() {
         return new ClientResponseDto(1L, "Petar", "Petrovic", 641520000000L, Pol.M,
-                "petar@banka.com", "+381641234567", "Njegoseva 25");
+                "petar@banka.com", "+381641234567", "Njegoseva 25", ClientRole.CLIENT_BASIC);
     }
 
     private ClientCreateRequestDto validCreateRequest() {

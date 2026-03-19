@@ -1,6 +1,7 @@
 package com.banka1.clientService.service.implementation;
 
 import com.banka1.clientService.domain.Klijent;
+import com.banka1.clientService.domain.enums.ClientRole;
 import com.banka1.clientService.domain.enums.Pol;
 import com.banka1.clientService.dto.requests.ClientCreateRequestDto;
 import com.banka1.clientService.dto.requests.ClientUpdateRequestDto;
@@ -347,6 +348,6 @@ class ClientServiceImplementationTest {
     }
 
     private ClientResponseDto responseDto(Long id, String ime, String prezime, String email) {
-        return new ClientResponseDto(id, ime, prezime, 946684800000L, Pol.M, email, "+38160123456", "Ulica bb, Beograd");
+        return new ClientResponseDto(id, ime, prezime, 946684800000L, Pol.M, email, "+38160123456", "Ulica bb, Beograd", ClientRole.CLIENT_BASIC);
     }
 }

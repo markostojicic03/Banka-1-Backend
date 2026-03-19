@@ -14,7 +14,6 @@ import com.banka1.clientService.rabbitMQ.RabbitClient;
 import com.banka1.clientService.repository.KlijentRepository;
 import com.banka1.clientService.service.ClientService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -27,7 +26,6 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * Sve pretrage koriste LIKE escapovanje radi zastite od SQL injection putem metakaraktera.
  * Email notifikacije se salju asinhorno putem RabbitMQ-a tek nakon uspesnog commita transakcije.
  */
-@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -68,13 +66,6 @@ public class ClientServiceImplementation implements ClientService {
             @Override
             public void afterCommit() {
                 rabbitClient.sendEmailNotification(emailDto);
-            }
-
-            @Override
-            public void afterCompletion(int status) {
-                if (status == STATUS_ROLLED_BACK) {
-                    log.warn("Transakcija je ponistena — preskacemo slanje email notifikacije za klijenta: {}", emailDto.getUserEmail());
-                }
             }
         });
 

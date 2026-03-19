@@ -1,5 +1,6 @@
 package com.banka1.clientService.domain;
 
+import com.banka1.clientService.domain.enums.ClientRole;
 import com.banka1.clientService.domain.enums.Pol;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
@@ -101,6 +102,13 @@ public class Klijent extends BaseEntity {
      * Adresa stanovanja klijenta.
      */
     private String adresa;
+
+    /**
+     * Uloga klijenta u sistemu.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private ClientRole role = ClientRole.CLIENT_BASIC;
 
     /**
      * Hesh lozinke klijenta (Argon2 ili slicno).

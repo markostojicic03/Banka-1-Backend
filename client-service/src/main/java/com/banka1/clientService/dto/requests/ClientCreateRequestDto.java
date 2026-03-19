@@ -47,4 +47,5 @@ public class ClientCreateRequestDto {
     @Size(min = 13, max = 13, message = "JMBG mora imati tacno 13 cifara")
     @Pattern(regexp = "^[0-9]{13}$", message = "JMBG mora sadrzati samo cifre")
     private String jmbg;
+
 }

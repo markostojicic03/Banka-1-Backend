@@ -30,6 +30,7 @@ public interface ClientMapper {
     @Mapping(target = "updatedAt",    ignore = true)
     @Mapping(target = "password",     ignore = true)
     @Mapping(target = "saltPassword", ignore = true)
+    @Mapping(target = "role",         ignore = true)
     Klijent toEntity(ClientCreateRequestDto dto);
 
     /**
@@ -52,5 +53,6 @@ public interface ClientMapper {
     @Mapping(target = "password",     ignore = true)
     @Mapping(target = "saltPassword", ignore = true)
     @Mapping(target = "jmbg",         ignore = true)
+    @Mapping(target = "role",         ignore = true)
     void updateEntityFromDto(@MappingTarget Klijent klijent, ClientUpdateRequestDto dto);
 }
