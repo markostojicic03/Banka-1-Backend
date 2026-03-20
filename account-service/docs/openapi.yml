@@ -33,6 +33,30 @@ paths:
             '*/*':
               schema:
                 type: string
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+        "404":
+          description: Card not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
   /employee/accounts/fx:
     post:
       tags:
@@ -52,6 +76,24 @@ paths:
             '*/*':
               schema:
                 type: string
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
   /employee/accounts/checking:
     post:
       tags:
@@ -71,6 +113,24 @@ paths:
             '*/*':
               schema:
                 type: string
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
   /client/transactions/{id}/approve:
     post:
       tags:
@@ -97,6 +157,30 @@ paths:
             '*/*':
               schema:
                 type: string
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+        "404":
+          description: Transaction not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
   /client/payments:
     post:
       tags:
@@ -116,6 +200,24 @@ paths:
             '*/*':
               schema:
                 type: string
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
   /client/accounts/{id}/name:
     patch:
       tags:
@@ -142,6 +244,30 @@ paths:
             '*/*':
               schema:
                 type: string
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+        "404":
+          description: Account not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
   /client/accounts/{id}/limit:
     patch:
       tags:
@@ -168,6 +294,30 @@ paths:
             '*/*':
               schema:
                 type: string
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+        "404":
+          description: Account not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
   /employee/accounts:
     get:
       tags:
@@ -214,6 +364,18 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/PageAccountSearchResponseDto"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
   /client/accounts:
     get:
       tags:
@@ -245,6 +407,18 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/PageAccountResponseDto"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
   /client/accounts/{id}:
     get:
       tags:
@@ -265,6 +439,24 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/AccountDetailsResponseDto"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+        "404":
+          description: Account not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
   /client/accounts/{id}/transactions:
     get:
       tags:
@@ -302,6 +494,24 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/PageTransactionResponseDto"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+        "404":
+          description: Account not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
   /client/accounts/{id}/cards:
     get:
       tags:
@@ -339,6 +549,24 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/PageCardResponseDto"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+        "404":
+          description: Account not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
 components:
   schemas:
     UpdateCardDto:
@@ -500,6 +728,22 @@ components:
       required:
       - accountLimit
       - tipLimita
+    ErrorResponseDto:
+      type: object
+      properties:
+        errorCode:
+          type: string
+        errorTitle:
+          type: string
+        errorDesc:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        validationErrors:
+          type: object
+          additionalProperties:
+            type: string
     AccountSearchResponseDto:
       type: object
       properties:
