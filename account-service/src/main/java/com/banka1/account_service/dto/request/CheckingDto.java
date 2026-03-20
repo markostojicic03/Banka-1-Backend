@@ -15,7 +15,7 @@ import lombok.Setter;
 //todo proveriti sta cemo za odrzavanje racuna
 public class CheckingDto {
 
-    @NotBlank
+    @NotBlank(message = "Unesi naziv racuna")
     private String nazivRacuna;
     private Long idVlasnika;
     private String jmbg;
