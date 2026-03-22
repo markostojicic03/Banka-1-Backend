@@ -3,6 +3,8 @@ package com.banka1.account_service.domain;
 import com.banka1.account_service.domain.enums.AccountOwnershipType;
 import com.banka1.account_service.domain.enums.Status;
 import jakarta.persistence.*;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -33,22 +35,26 @@ import java.time.LocalDateTime;
 @Setter
 //todo da li staviti datum isteka na null
 public abstract class Account extends BaseEntity{
+    @NotBlank
     @Column(nullable = false,unique = true,updatable = false)
     private String brojRacuna;
-
+    @NotBlank
     @Column(nullable = false)
     private String imeVlasnikaRacuna;
+    @NotBlank
     @Column(nullable = false)
     private String prezimeVlasnikaRacuna;
-
+    @NotBlank
     @Column(nullable = false)
     private String nazivRacuna;
     @Column(nullable = false)
     private Long vlasnik;
+    //@DecimalMin(value = "0.00", inclusive = true)
     @Column(nullable = false)
-    private BigDecimal stanje= BigDecimal.valueOf(0);
+    private BigDecimal stanje= BigDecimal.ZERO;
+    @DecimalMin(value = "0.00", inclusive = true)
     @Column(nullable = false)
-    private BigDecimal raspolozivoStanje= BigDecimal.valueOf(0);
+    private BigDecimal raspolozivoStanje= BigDecimal.ZERO;
     @Column(nullable = false)
     private Long zaposlen;
     //todo mozda LocalDateTime
@@ -62,14 +68,18 @@ public abstract class Account extends BaseEntity{
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
     private Status status=Status.ACTIVE;
+    @DecimalMin(value = "0.00", inclusive = true)
 //    @Column(nullable = false)
     private BigDecimal dnevniLimit;
+    @DecimalMin(value = "0.00", inclusive = true)
 //    @Column(nullable = false)
     private BigDecimal mesecniLimit;
+    @DecimalMin(value = "0.00", inclusive = true)
     @Column(nullable = false)
     private BigDecimal dnevnaPotrosnja=BigDecimal.ZERO;
+    @DecimalMin(value = "0.00", inclusive = false)
     @Column(nullable = false)
-    private BigDecimal mesecnaPotrosnja=BigDecimal.ZERO;
+    private BigDecimal mesecnaPotrosnja;
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "company_id")
     private Company company;

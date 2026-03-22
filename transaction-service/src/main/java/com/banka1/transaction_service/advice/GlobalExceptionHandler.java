@@ -1,7 +1,7 @@
-package com.banka1.account_service.advice;
+package com.banka1.transaction_service.advice;
 
 
-import com.banka1.account_service.dto.response.ErrorResponseDto;
+import com.banka1.transaction_service.dto.response.ErrorResponseDto;
 import org.springframework.amqp.AmqpException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -21,7 +21,7 @@ import java.util.NoSuchElementException;
  * Mapira ocekivane i neocekivane izuzetke na standardizovane HTTP odgovore sa {@link ErrorResponseDto} telom.
  */
 @RestControllerAdvice
-@Component("accountServiceGlobalExceptionHandler")
+@Component("transactionServiceGlobalExceptionHandler")
 public class GlobalExceptionHandler {
 
     /**

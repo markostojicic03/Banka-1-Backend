@@ -29,16 +29,16 @@ public class ClientServiceImplementation implements ClientService {
     @Value("${banka.security.id}")
     private String appPropertiesId;
 
-    @Override
-    public String newPayment(Jwt jwt, NewPaymentDto newPaymentDto) {
-        return "";
-    }
-
-    //todo kada dodje mobile
-    @Override
-    public String approveTransaction(Jwt jwt, Long id, ApproveDto newPaymentDto) {
-        return "";
-    }
+//    @Override
+//    public String newPayment(Jwt jwt, NewPaymentDto newPaymentDto) {
+//        return "";
+//    }
+//
+//    //todo kada dodje mobile
+//    @Override
+//    public String approveTransaction(Jwt jwt, Long id, ApproveDto newPaymentDto) {
+//        return "";
+//    }
 
 
     @Transactional
@@ -47,26 +47,32 @@ public class ClientServiceImplementation implements ClientService {
         return accountRepository.findByVlasnikAndStatus(((Number) jwt.getClaim(appPropertiesId)).longValue(), Status.ACTIVE,PageRequest.of(page, size)).map(AccountResponseDto::new);
     }
 
-    @Transactional
-    @Override
-    public Page<TransactionResponseDto> findAllTransactions(Jwt jwt, Long id, int page, int size) {
-        Account account=accountRepository.findById(id).orElse(null);
+//    @Transactional
+//    @Override
+//    public Page<TransactionResponseDto> findAllTransactions(Jwt jwt, Long id, int page, int size) {
+//        Account account=accountRepository.findById(id).orElse(null);
+//        if(account==null)
+//            throw new IllegalArgumentException("Ne postoji unet racun");
+//        if(!account.getVlasnik().equals(((Number) jwt.getClaim(appPropertiesId)).longValue()))
+//            throw new IllegalArgumentException("Nisi vlasnik racuna");
+//
+//        return null;
+//    }
+
+    //TODO menjati exceptione
+    private void  validation(Account account,Jwt jwt)
+    {
         if(account==null)
             throw new IllegalArgumentException("Ne postoji unet racun");
         if(!account.getVlasnik().equals(((Number) jwt.getClaim(appPropertiesId)).longValue()))
             throw new IllegalArgumentException("Nisi vlasnik racuna");
-
-        return null;
     }
 
     @Transactional
     @Override
     public String editAccountName(Jwt jwt, Long id, EditAccountNameDto editAccountNameDto) {
         Account account=accountRepository.findById(id).orElse(null);
-        if(account==null)
-            throw new IllegalArgumentException("Ne postoji unet racun");
-        if(!account.getVlasnik().equals(((Number) jwt.getClaim(appPropertiesId)).longValue()))
-            throw new IllegalArgumentException("Nisi vlasnik racuna");
+        validation(account,jwt);
         account.setNazivRacuna(editAccountNameDto.getAccountName());
         return "Uspesno editovano ime";
     }
@@ -75,10 +81,7 @@ public class ClientServiceImplementation implements ClientService {
     @Override
     public String editAccountLimit(Jwt jwt, Long id, EditAccountLimitDto editAccountLimitDto) {
         Account account=accountRepository.findById(id).orElse(null);
-        if(account==null)
-            throw new IllegalArgumentException("Ne postoji unet racun");
-        if(!account.getVlasnik().equals(((Number) jwt.getClaim(appPropertiesId)).longValue()))
-            throw new IllegalArgumentException("Nisi vlasnik racuna");
+        validation(account,jwt);
         if(editAccountLimitDto.getTipLimita() == EditAccountLimitDto.TipLimita.DNEVNI)
             account.setDnevniLimit(editAccountLimitDto.getAccountLimit());
         else
@@ -87,13 +90,11 @@ public class ClientServiceImplementation implements ClientService {
         return "Uspesno setovan limit";
     }
 
+    @Transactional
     @Override
     public AccountDetailsResponseDto getDetails(Jwt jwt, Long id) {
         Account account=accountRepository.findById(id).orElse(null);
-        if(account==null)
-            throw new IllegalArgumentException("Ne postoji unet racun");
-        if(!account.getVlasnik().equals(((Number) jwt.getClaim(appPropertiesId)).longValue()))
-            throw new IllegalArgumentException("Nisi vlasnik racuna");
+        validation(account,jwt);
         return new AccountDetailsResponseDto(account);
     }
 

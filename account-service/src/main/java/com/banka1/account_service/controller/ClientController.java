@@ -28,35 +28,35 @@ import org.springframework.web.bind.annotation.*;
 public class ClientController {
     private ClientService clientService;
 
-    @Operation(summary = "Create a new payment")
-    @ApiResponses({
-        @ApiResponse(responseCode = "400", description = "Invalid request body",
-            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))),
-        @ApiResponse(responseCode = "401", description = "Unauthorized",
-            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))),
-        @ApiResponse(responseCode = "403", description = "Forbidden",
-            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
-    })
-    @PostMapping("/payments")
-    public ResponseEntity<String> newPayment(@AuthenticationPrincipal Jwt jwt,@RequestBody @Valid NewPaymentDto newPaymentDto) {
-        return new ResponseEntity<>(clientService.newPayment(jwt,newPaymentDto), HttpStatus.OK);
-    }
-
-    @Operation(summary = "Approve a transaction")
-    @ApiResponses({
-        @ApiResponse(responseCode = "400", description = "Invalid request body",
-            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))),
-        @ApiResponse(responseCode = "401", description = "Unauthorized",
-            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))),
-        @ApiResponse(responseCode = "403", description = "Forbidden",
-            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))),
-        @ApiResponse(responseCode = "404", description = "Transaction not found",
-            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
-    })
-    @PostMapping("/transactions/{id}/approve")
-    public ResponseEntity<String> approveTransaction(@AuthenticationPrincipal Jwt jwt,@PathVariable Long id,@RequestBody @Valid ApproveDto approveDto) {
-        return new ResponseEntity<>(clientService.approveTransaction(jwt,id,approveDto), HttpStatus.OK);
-    }
+//    @Operation(summary = "Create a new payment")
+//    @ApiResponses({
+//        @ApiResponse(responseCode = "400", description = "Invalid request body",
+//            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))),
+//        @ApiResponse(responseCode = "401", description = "Unauthorized",
+//            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))),
+//        @ApiResponse(responseCode = "403", description = "Forbidden",
+//            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
+//    })
+//    @PostMapping("/payments")
+//    public ResponseEntity<String> newPayment(@AuthenticationPrincipal Jwt jwt,@RequestBody @Valid NewPaymentDto newPaymentDto) {
+//        return new ResponseEntity<>(clientService.newPayment(jwt,newPaymentDto), HttpStatus.OK);
+//    }
+//
+//    @Operation(summary = "Approve a transaction")
+//    @ApiResponses({
+//        @ApiResponse(responseCode = "400", description = "Invalid request body",
+//            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))),
+//        @ApiResponse(responseCode = "401", description = "Unauthorized",
+//            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))),
+//        @ApiResponse(responseCode = "403", description = "Forbidden",
+//            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))),
+//        @ApiResponse(responseCode = "404", description = "Transaction not found",
+//            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
+//    })
+//    @PostMapping("/transactions/{id}/approve")
+//    public ResponseEntity<String> approveTransaction(@AuthenticationPrincipal Jwt jwt,@PathVariable Long id,@RequestBody @Valid ApproveDto approveDto) {
+//        return new ResponseEntity<>(clientService.approveTransaction(jwt,id,approveDto), HttpStatus.OK);
+//    }
 
     //todo mozda detalji i find uopste ne moraju da se razlikuju po pitanju toga sta se vraca
     @Operation(summary = "Get my accounts")
@@ -73,22 +73,22 @@ public class ClientController {
         return new ResponseEntity<>(clientService.findMyAccounts(jwt,page,size), HttpStatus.OK);
     }
 
-    @Operation(summary = "Get account transactions")
-    @ApiResponses({
-        @ApiResponse(responseCode = "401", description = "Unauthorized",
-            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))),
-        @ApiResponse(responseCode = "403", description = "Forbidden",
-            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))),
-        @ApiResponse(responseCode = "404", description = "Account not found",
-            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
-    })
-    @GetMapping("/accounts/{id}/transactions")
-    public ResponseEntity<Page<TransactionResponseDto>> findAllTransactions(@AuthenticationPrincipal Jwt jwt,
-                                                                            @PathVariable Long id,
-                                                                            @RequestParam(defaultValue = "0") @Min(value = 0) int page,
-                                                                            @RequestParam(defaultValue = "10") @Min(value = 1) @Max(value = 100) int size) {
-        return new ResponseEntity<>(clientService.findAllTransactions(jwt,id,page,size), HttpStatus.OK);
-    }
+//    @Operation(summary = "Get account transactions")
+//    @ApiResponses({
+//        @ApiResponse(responseCode = "401", description = "Unauthorized",
+//            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))),
+//        @ApiResponse(responseCode = "403", description = "Forbidden",
+//            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))),
+//        @ApiResponse(responseCode = "404", description = "Account not found",
+//            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
+//    })
+//    @GetMapping("/accounts/{id}/transactions")
+//    public ResponseEntity<Page<TransactionResponseDto>> findAllTransactions(@AuthenticationPrincipal Jwt jwt,
+//                                                                            @PathVariable Long id,
+//                                                                            @RequestParam(defaultValue = "0") @Min(value = 0) int page,
+//                                                                            @RequestParam(defaultValue = "10") @Min(value = 1) @Max(value = 100) int size) {
+//        return new ResponseEntity<>(clientService.findAllTransactions(jwt,id,page,size), HttpStatus.OK);
+//    }
 
     @Operation(summary = "Edit account name")
     @ApiResponses({
@@ -141,20 +141,20 @@ public class ClientController {
         return new ResponseEntity<>(clientService.getDetails(jwt,id), HttpStatus.OK);
     }
 
-    @Operation(summary = "Get account cards")
-    @ApiResponses({
-        @ApiResponse(responseCode = "401", description = "Unauthorized",
-            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))),
-        @ApiResponse(responseCode = "403", description = "Forbidden",
-            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))),
-        @ApiResponse(responseCode = "404", description = "Account not found",
-            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
-    })
-    @GetMapping("/accounts/{id}/cards")
-    public ResponseEntity<Page<CardResponseDto>> findAllCards(@AuthenticationPrincipal Jwt jwt,
-                                                              @PathVariable Long id,
-                                                              @RequestParam(defaultValue = "0") @Min(value = 0) int page,
-                                                              @RequestParam(defaultValue = "10") @Min(value = 1) @Max(value = 100) int size) {
-        return new ResponseEntity<>(clientService.findAllCards(jwt,id,page,size), HttpStatus.OK);
-    }
+//    @Operation(summary = "Get account cards")
+//    @ApiResponses({
+//        @ApiResponse(responseCode = "401", description = "Unauthorized",
+//            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))),
+//        @ApiResponse(responseCode = "403", description = "Forbidden",
+//            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))),
+//        @ApiResponse(responseCode = "404", description = "Account not found",
+//            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
+//    })
+//    @GetMapping("/accounts/{id}/cards")
+//    public ResponseEntity<Page<CardResponseDto>> findAllCards(@AuthenticationPrincipal Jwt jwt,
+//                                                              @PathVariable Long id,
+//                                                              @RequestParam(defaultValue = "0") @Min(value = 0) int page,
+//                                                              @RequestParam(defaultValue = "10") @Min(value = 1) @Max(value = 100) int size) {
+//        return new ResponseEntity<>(clientService.findAllCards(jwt,id,page,size), HttpStatus.OK);
+//    }
 }

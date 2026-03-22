@@ -1,6 +1,7 @@
 package com.banka1.account_service.domain;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -17,6 +18,7 @@ import java.util.Set;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class SifraDelatnosti extends BaseEntity{
+    @NotBlank
     @Column(nullable = false,updatable = false,unique = true)
     private String sifra;
     @ElementCollection
@@ -26,6 +28,7 @@ public class SifraDelatnosti extends BaseEntity{
     )
     @Column(name = "sektor", nullable = false)
     private Set<String> sektori = new HashSet<>();
+    @NotBlank
     @Column(nullable = false,updatable = false)
     private String grana;
 
