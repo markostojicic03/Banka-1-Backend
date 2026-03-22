@@ -8,7 +8,7 @@
     <springProperty scope="context"
                     name="loggingFilePath"
                     source="logging.file.path"
-                    defaultValue="/var/log/banka"/>
+                    defaultValue="./build/logs"/>
     <property name="logFile" value="${loggingFilePath}/application.log"/>
 
     <appender name="CONSOLE_JSON" class="ch.qos.logback.core.ConsoleAppender">
