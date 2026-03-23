@@ -31,6 +31,13 @@ public interface ExchangeRateRepository extends JpaRepository<ExchangeRateEntity
     List<ExchangeRateEntity> findAllByDateOrderByCurrencyCodeAsc(LocalDate date);
 
     /**
+     * Brise ceo snapshot za zadati datum.
+     *
+     * @param date datum snapshot-a koji treba zameniti
+     */
+    void deleteByDate(LocalDate date);
+
+    /**
      * Vraca poslednji datum za koji postoji bilo koji kurs.
      *
      * @return poslednji snapshot datum ili {@code null} ako baza nema podatke

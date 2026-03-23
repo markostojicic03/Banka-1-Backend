@@ -11,10 +11,10 @@ import com.banka1.exchangeService.dto.TwelveDataRateResponse;
 import com.banka1.exchangeService.exception.BusinessException;
 import com.banka1.exchangeService.exception.ErrorCode;
 import com.banka1.exchangeService.repository.ExchangeRateRepository;
+import com.banka1.exchangeService.service.ExchangeRateSnapshotPersistenceService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -30,9 +30,10 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.lenient;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -57,6 +58,9 @@ class ExchangeRateServiceImplTest {
     @Mock
     private ExchangeRateRepository exchangeRateRepository;
 
+    @Mock
+    private ExchangeRateSnapshotPersistenceService snapshotPersistenceService;
+
     @InjectMocks
     private ExchangeRateServiceImpl exchangeRateService;
 
@@ -67,7 +71,13 @@ class ExchangeRateServiceImplTest {
     @BeforeEach
     void setUp() {
         lenient().when(exchangeRateProperties.commissionPercentage()).thenReturn(new BigDecimal("0.70"));
-        exchangeRateService = new ExchangeRateServiceImpl(twelveDataClient, exchangeRateProperties, exchangeRateRepository, FIXED_CLOCK);
+        exchangeRateService = new ExchangeRateServiceImpl(
+                twelveDataClient,
+                exchangeRateProperties,
+                exchangeRateRepository,
+                snapshotPersistenceService,
+                FIXED_CLOCK
+        );
     }
 
     /**
@@ -94,24 +104,24 @@ class ExchangeRateServiceImplTest {
                 .thenReturn(new TwelveDataRateResponse("CAD", "RSD", new BigDecimal("79.40"), date));
         when(twelveDataClient.fetchExchangeRate("AUD", "RSD"))
                 .thenReturn(new TwelveDataRateResponse("AUD", "RSD", new BigDecimal("70.40"), date));
-        when(exchangeRateRepository.findByCurrencyCodeAndDate(any(), eq(date))).thenReturn(Optional.empty());
-        when(exchangeRateRepository.save(any(ExchangeRateEntity.class))).thenAnswer(invocation -> {
-            ExchangeRateEntity entity = invocation.getArgument(0);
-            entity.setId(1L);
-            entity.setCreatedAt(Timestamp.from(Instant.parse("2026-03-22T10:15:30Z")));
-            return entity;
-        });
+        when(snapshotPersistenceService.replaceSnapshot(eq(date), any()))
+                .thenReturn(List.of(
+                        entity("EUR", "116.22600000", "118.57400000", date),
+                        entity("CHF", "119.19600000", "121.60400000", date),
+                        entity("USD", "107.31600000", "109.48400000", date),
+                        entity("GBP", "136.02600000", "138.77400000", date),
+                        entity("JPY", "0.71280000", "0.72720000", date),
+                        entity("CAD", "78.60600000", "80.19400000", date),
+                        entity("AUD", "69.69600000", "71.10400000", date)
+                ));
 
         ExchangeRateFetchResponseDto response = exchangeRateService.fetchAndStoreDailyRates();
 
         assertThat(response.fetchedCount()).isEqualTo(7);
         assertThat(response.rates()).extracting(ExchangeRateDto::currencyCode)
                 .containsExactlyInAnyOrder("EUR", "CHF", "USD", "GBP", "JPY", "CAD", "AUD");
-
-        ArgumentCaptor<ExchangeRateEntity> captor = ArgumentCaptor.forClass(ExchangeRateEntity.class);
-        verify(exchangeRateRepository, org.mockito.Mockito.times(7)).save(captor.capture());
-        assertThat(captor.getAllValues())
-                .extracting(ExchangeRateEntity::getSellingRate)
+        assertThat(response.rates())
+                .extracting(ExchangeRateDto::sellingRate)
                 .containsExactlyInAnyOrder(
                         new BigDecimal("118.57400000"),
                         new BigDecimal("121.60400000"),
@@ -121,8 +131,8 @@ class ExchangeRateServiceImplTest {
                         new BigDecimal("80.19400000"),
                         new BigDecimal("71.10400000")
                 );
-        assertThat(captor.getAllValues())
-                .extracting(ExchangeRateEntity::getBuyingRate)
+        assertThat(response.rates())
+                .extracting(ExchangeRateDto::buyingRate)
                 .containsExactlyInAnyOrder(
                         new BigDecimal("116.22600000"),
                         new BigDecimal("119.19600000"),
@@ -132,6 +142,7 @@ class ExchangeRateServiceImplTest {
                         new BigDecimal("78.60600000"),
                         new BigDecimal("69.69600000")
                 );
+        verify(snapshotPersistenceService).replaceSnapshot(eq(date), any());
     }
 
     /**
@@ -164,20 +175,16 @@ class ExchangeRateServiceImplTest {
         LocalDate fallbackDate = LocalDate.of(2026, 3, 23);
         when(twelveDataClient.fetchExchangeRate("EUR", "RSD"))
                 .thenThrow(new BusinessException(ErrorCode.EXCHANGE_RATE_FETCH_FAILED, "Provider unavailable"));
-        when(exchangeRateRepository.findLatestDate()).thenReturn(previousDate);
         when(exchangeRateRepository.findAllByDateOrderByCurrencyCodeAsc(previousDate))
                 .thenReturn(List.of(
                         entity("EUR", "117.40", "117.40", previousDate),
                         entity("USD", "108.40", "108.40", previousDate)
                 ));
-        when(exchangeRateRepository.findByCurrencyCodeAndDate("EUR", fallbackDate)).thenReturn(Optional.empty());
-        when(exchangeRateRepository.findByCurrencyCodeAndDate("USD", fallbackDate)).thenReturn(Optional.empty());
-        when(exchangeRateRepository.save(any(ExchangeRateEntity.class))).thenAnswer(invocation -> {
-            ExchangeRateEntity entity = invocation.getArgument(0);
-            entity.setId(1L);
-            entity.setCreatedAt(Timestamp.from(Instant.parse("2026-03-23T08:00:00Z")));
-            return entity;
-        });
+        when(snapshotPersistenceService.replaceSnapshot(eq(fallbackDate), any()))
+                .thenReturn(List.of(
+                        entity("EUR", "117.40", "117.40", fallbackDate),
+                        entity("USD", "108.40", "108.40", fallbackDate)
+                ));
 
         ExchangeRateFetchResponseDto response = exchangeRateService.fetchAndStoreDailyRates();
 
@@ -186,6 +193,59 @@ class ExchangeRateServiceImplTest {
                 .containsOnly(fallbackDate);
         assertThat(response.rates()).extracting(ExchangeRateDto::currencyCode)
                 .containsExactlyInAnyOrder("EUR", "USD");
+        verify(exchangeRateRepository).findAllByDateOrderByCurrencyCodeAsc(previousDate);
+        verify(snapshotPersistenceService).replaceSnapshot(eq(fallbackDate), any());
+    }
+
+    /**
+     * Proverava strogo pravilo da fallback sme da koristi iskljucivo snapshot
+     * za jucerasnji datum.
+     */
+    @Test
+    void fetchAndStoreDailyRatesThrowsWhenStrictPreviousDaySnapshotIsMissing() {
+        LocalDate previousDate = LocalDate.of(2026, 3, 22);
+        when(twelveDataClient.fetchExchangeRate("EUR", "RSD"))
+                .thenThrow(new BusinessException(ErrorCode.EXCHANGE_RATE_FETCH_FAILED, "Provider unavailable"));
+        when(exchangeRateRepository.findAllByDateOrderByCurrencyCodeAsc(previousDate))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() -> exchangeRateService.fetchAndStoreDailyRates())
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.EXCHANGE_RATE_FETCH_FAILED);
+
+        verify(exchangeRateRepository).findAllByDateOrderByCurrencyCodeAsc(previousDate);
+        verify(snapshotPersistenceService, never()).replaceSnapshot(any(), any());
+    }
+
+    /**
+     * Proverava da neuspeh usred fetch-a ne moze da upise parcijalni snapshot.
+     */
+    @Test
+    void fetchAndStoreDailyRatesDoesNotPersistMixedSnapshotWhenFetchFailsMidBatch() {
+        LocalDate date = LocalDate.of(2026, 3, 23);
+        LocalDate previousDate = LocalDate.of(2026, 3, 22);
+        when(twelveDataClient.fetchExchangeRate("EUR", "RSD"))
+                .thenReturn(new TwelveDataRateResponse("EUR", "RSD", new BigDecimal("117.40"), date));
+        when(twelveDataClient.fetchExchangeRate("CHF", "RSD"))
+                .thenThrow(new BusinessException(ErrorCode.EXCHANGE_RATE_FETCH_FAILED, "Provider unavailable"));
+        when(exchangeRateRepository.findAllByDateOrderByCurrencyCodeAsc(previousDate))
+                .thenReturn(List.of(
+                        entity("EUR", "116.22600000", "118.57400000", previousDate),
+                        entity("USD", "107.31600000", "109.48400000", previousDate)
+                ));
+        when(snapshotPersistenceService.replaceSnapshot(eq(date), any()))
+                .thenReturn(List.of(
+                        entity("EUR", "116.22600000", "118.57400000", date),
+                        entity("USD", "107.31600000", "109.48400000", date)
+                ));
+
+        ExchangeRateFetchResponseDto response = exchangeRateService.fetchAndStoreDailyRates();
+
+        assertThat(response.fetchedCount()).isEqualTo(2);
+        assertThat(response.rates()).extracting(ExchangeRateDto::date).containsOnly(date);
+        verify(snapshotPersistenceService, never()).replaceSnapshot(eq(previousDate), any());
+        verify(snapshotPersistenceService).replaceSnapshot(eq(date), any());
     }
 
     /**
@@ -291,6 +351,65 @@ class ExchangeRateServiceImplTest {
         assertThat(response.toAmount()).isEqualByComparingTo("216.00000000");
         assertThat(response.rate()).isEqualByComparingTo("108.00000000");
         assertThat(response.commission()).isEqualByComparingTo("0.01");
+    }
+
+    /**
+     * Proverava da provizija za kalkulaciju koristi runtime konfiguraciju, a ne
+     * hardkodovanu vrednost.
+     */
+    @Test
+    void convertUsesConfiguredCommissionPercentage() {
+        LocalDate latestDate = LocalDate.of(2026, 3, 22);
+        when(exchangeRateProperties.commissionPercentage()).thenReturn(new BigDecimal("0.25"));
+        when(exchangeRateRepository.findLatestDate()).thenReturn(latestDate);
+        when(exchangeRateRepository.findByCurrencyCodeAndDate("USD", latestDate))
+                .thenReturn(Optional.of(entity("USD", "107.00", "108.00", latestDate)));
+
+        ConversionResponseDto response = exchangeRateService.convert(
+                new ConversionRequestDto(new BigDecimal("200.00"), "RSD", "USD", null)
+        );
+
+        assertThat(response.commission()).isEqualByComparingTo("0.50");
+    }
+
+    /**
+     * Proverava da date query parametar zaista bira trazeni istorijski snapshot.
+     */
+    @Test
+    void convertUsesExplicitHistoricalSnapshotDate() {
+        LocalDate historicalDate = LocalDate.of(2026, 3, 21);
+        when(exchangeRateRepository.findByCurrencyCodeAndDate("EUR", historicalDate))
+                .thenReturn(Optional.of(entity("EUR", "116.00", "118.00", historicalDate)));
+        when(exchangeRateRepository.findByCurrencyCodeAndDate("USD", historicalDate))
+                .thenReturn(Optional.of(entity("USD", "107.00", "109.00", historicalDate)));
+
+        ConversionResponseDto response = exchangeRateService.convert(
+                new ConversionRequestDto(new BigDecimal("100.00"), "EUR", "USD", historicalDate)
+        );
+
+        assertThat(response.toAmount()).isEqualByComparingTo("108.25688073");
+        assertThat(response.date()).isEqualTo(historicalDate);
+    }
+
+    /**
+     * Proverava da servis ne izmisli konverziju kada za trazeni datum ne postoji
+     * jedna od potrebnih valuta.
+     */
+    @Test
+    void convertThrowsWhenTargetRateIsMissing() {
+        LocalDate latestDate = LocalDate.of(2026, 3, 22);
+        when(exchangeRateRepository.findLatestDate()).thenReturn(latestDate);
+        when(exchangeRateRepository.findByCurrencyCodeAndDate("EUR", latestDate))
+                .thenReturn(Optional.of(entity("EUR", "117.00", "118.00", latestDate)));
+        when(exchangeRateRepository.findByCurrencyCodeAndDate("USD", latestDate))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> exchangeRateService.convert(
+                new ConversionRequestDto(new BigDecimal("100.00"), "EUR", "USD", null)
+        ))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.EXCHANGE_RATE_NOT_FOUND);
     }
 
     /**

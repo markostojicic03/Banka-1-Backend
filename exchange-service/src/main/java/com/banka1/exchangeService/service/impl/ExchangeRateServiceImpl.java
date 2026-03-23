@@ -13,6 +13,7 @@ import com.banka1.exchangeService.exception.BusinessException;
 import com.banka1.exchangeService.exception.ErrorCode;
 import com.banka1.exchangeService.repository.ExchangeRateRepository;
 import com.banka1.exchangeService.service.ExchangeRateService;
+import com.banka1.exchangeService.service.ExchangeRateSnapshotPersistenceService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -61,6 +62,10 @@ public class ExchangeRateServiceImpl implements ExchangeRateService {
      * Repozitorijum za lokalno skladistenje i citanje snapshot-a.
      */
     private final ExchangeRateRepository exchangeRateRepository;
+    /**
+     * Transakciona komponenta za atomsku zamenu celog snapshot-a.
+     */
+    private final ExchangeRateSnapshotPersistenceService snapshotPersistenceService;
 
     /**
      * Sat koji se koristi za odredjivanje ciljnog fallback datuma.
@@ -78,9 +83,16 @@ public class ExchangeRateServiceImpl implements ExchangeRateService {
     public ExchangeRateServiceImpl(
             TwelveDataClient twelveDataClient,
             ExchangeRateProperties exchangeRateProperties,
-            ExchangeRateRepository exchangeRateRepository
+            ExchangeRateRepository exchangeRateRepository,
+            ExchangeRateSnapshotPersistenceService snapshotPersistenceService
     ) {
-        this(twelveDataClient, exchangeRateProperties, exchangeRateRepository, Clock.systemUTC());
+        this(
+                twelveDataClient,
+                exchangeRateProperties,
+                exchangeRateRepository,
+                snapshotPersistenceService,
+                Clock.systemUTC()
+        );
     }
 
     /**
@@ -95,24 +107,30 @@ public class ExchangeRateServiceImpl implements ExchangeRateService {
             TwelveDataClient twelveDataClient,
             ExchangeRateProperties exchangeRateProperties,
             ExchangeRateRepository exchangeRateRepository,
+            ExchangeRateSnapshotPersistenceService snapshotPersistenceService,
             Clock clock
     ) {
         this.twelveDataClient = twelveDataClient;
         this.exchangeRateProperties = exchangeRateProperties;
         this.exchangeRateRepository = exchangeRateRepository;
+        this.snapshotPersistenceService = snapshotPersistenceService;
         this.clock = clock;
     }
 
     @Override
-    @Transactional
     public ExchangeRateFetchResponseDto fetchAndStoreDailyRates() {
         try {
             List<TwelveDataRateResponse> fetchedRates = SupportedCurrency.trackedCurrencyCodes().stream()
                     .map(this::fetchRate)
                     .toList();
 
-            List<ExchangeRateDto> storedRates = fetchedRates.stream()
-                    .map(this::upsertFetchedRate)
+            LocalDate snapshotDate = resolveFetchedSnapshotDate(fetchedRates);
+            List<ExchangeRateDto> storedRates = snapshotPersistenceService.replaceSnapshot(
+                            snapshotDate,
+                            fetchedRates.stream()
+                                    .map(this::toPreparedRate)
+                                    .toList()
+                    ).stream()
                     .map(this::toDto)
                     .toList();
 
@@ -215,21 +233,17 @@ public class ExchangeRateServiceImpl implements ExchangeRateService {
     }
 
     /**
-     * Cuva ili azurira lokalni snapshot na osnovu provider odgovora.
+     * Pretvara provider odgovor u potpuno pripremljen red lokalnog snapshot-a.
      *
      * @param response parsiran odgovor spoljnog providera
-     * @return sacuvani entitet kursa
+     * @return pripremljen red za atomsko persistiranje
      */
-    private ExchangeRateEntity upsertFetchedRate(TwelveDataRateResponse response) {
-        String currencyCode = response.fromCurrency();
-        ExchangeRateEntity entity = exchangeRateRepository.findByCurrencyCodeAndDate(currencyCode, response.date())
-                .orElseGet(ExchangeRateEntity::new);
-        entity.setCurrencyCode(currencyCode);
-        entity.setBuyingRate(calculateBuyingRate(response.rate()));
-        entity.setSellingRate(calculateSellingRate(response.rate()));
-        entity.setDate(response.date());
-
-        return exchangeRateRepository.save(entity);
+    private ExchangeRateSnapshotPersistenceService.PreparedExchangeRate toPreparedRate(TwelveDataRateResponse response) {
+        return new ExchangeRateSnapshotPersistenceService.PreparedExchangeRate(
+                response.fromCurrency(),
+                calculateBuyingRate(response.rate()),
+                calculateSellingRate(response.rate())
+        );
     }
 
     /**
@@ -290,48 +304,68 @@ public class ExchangeRateServiceImpl implements ExchangeRateService {
      * @return rezultat sa fallback snapshot-om za ciljni datum
      */
     private ExchangeRateFetchResponseDto fallbackToPreviousSnapshot(BusinessException rootCause) {
-        LocalDate latestDate = exchangeRateRepository.findLatestDate();
-        if (latestDate == null) {
-            throw rootCause;
-        }
-
-        List<ExchangeRateEntity> previousRates = exchangeRateRepository.findAllByDateOrderByCurrencyCodeAsc(latestDate);
-        if (previousRates.isEmpty()) {
-            throw rootCause;
-        }
-
         LocalDate targetDate = LocalDate.now(clock);
-        if (!latestDate.isBefore(targetDate)) {
-            log.warn("Exchange-rate fetch failed; reusing existing snapshot for {}. Cause: {}", latestDate, rootCause.getMessage());
-            List<ExchangeRateDto> existingRates = previousRates.stream()
-                    .map(this::toDto)
-                    .toList();
-            return new ExchangeRateFetchResponseDto(existingRates.size(), existingRates);
+        LocalDate previousDay = targetDate.minusDays(1);
+        List<ExchangeRateEntity> previousRates = exchangeRateRepository.findAllByDateOrderByCurrencyCodeAsc(previousDay);
+        if (previousRates.isEmpty()) {
+            throw new BusinessException(
+                    ErrorCode.EXCHANGE_RATE_FETCH_FAILED,
+                    "Exchange-rate fetch failed and no previous-day snapshot exists for %s.".formatted(previousDay)
+            );
         }
 
-        log.warn("Exchange-rate fetch failed; copying snapshot from {} to {}. Cause: {}", latestDate, targetDate, rootCause.getMessage());
-        List<ExchangeRateDto> fallbackRates = previousRates.stream()
-                .map(previousRate -> copyRateToDate(previousRate, targetDate))
+        log.warn("Exchange-rate fetch failed; copying strict previous-day snapshot from {} to {}. Cause: {}",
+                previousDay, targetDate, rootCause.getMessage());
+        List<ExchangeRateDto> fallbackRates = snapshotPersistenceService.replaceSnapshot(
+                        targetDate,
+                        previousRates.stream()
+                                .map(this::toPreparedRate)
+                                .toList()
+                ).stream()
                 .map(this::toDto)
                 .toList();
         return new ExchangeRateFetchResponseDto(fallbackRates.size(), fallbackRates);
     }
 
     /**
-     * Kopira prethodni kurs na novi datum snapshot-a.
+     * Pretvara lokalno sacuvan kurs u pripremljen red za novi datum snapshot-a.
      *
      * @param previousRate prethodno sacuvan kurs
-     * @param targetDate   datum fallback snapshot-a
-     * @return sacuvani entitet za novi datum
+     * @return pripremljen red za atomsko persistiranje fallback snapshot-a
      */
-    private ExchangeRateEntity copyRateToDate(ExchangeRateEntity previousRate, LocalDate targetDate) {
-        ExchangeRateEntity entity = exchangeRateRepository.findByCurrencyCodeAndDate(previousRate.getCurrencyCode(), targetDate)
-                .orElseGet(ExchangeRateEntity::new);
-        entity.setCurrencyCode(previousRate.getCurrencyCode());
-        entity.setBuyingRate(previousRate.getBuyingRate());
-        entity.setSellingRate(previousRate.getSellingRate());
-        entity.setDate(targetDate);
-        return exchangeRateRepository.save(entity);
+    private ExchangeRateSnapshotPersistenceService.PreparedExchangeRate toPreparedRate(ExchangeRateEntity previousRate) {
+        return new ExchangeRateSnapshotPersistenceService.PreparedExchangeRate(
+                previousRate.getCurrencyCode(),
+                previousRate.getBuyingRate(),
+                previousRate.getSellingRate()
+        );
+    }
+
+    /**
+     * Zahteva da svi fetched provider odgovori pripadaju istom datumskom snapshot-u.
+     *
+     * @param fetchedRates potpuni skup fetched kurseva
+     * @return jedinstveni datum snapshot-a koji ce biti lokalno sacuvan
+     */
+    private LocalDate resolveFetchedSnapshotDate(List<TwelveDataRateResponse> fetchedRates) {
+        if (fetchedRates.isEmpty()) {
+            throw new BusinessException(
+                    ErrorCode.EXCHANGE_RATE_FETCH_FAILED,
+                    "Exchange-rate fetch returned no supported currencies."
+            );
+        }
+
+        LocalDate snapshotDate = fetchedRates.getFirst().date();
+        boolean mixedDates = fetchedRates.stream()
+                .map(TwelveDataRateResponse::date)
+                .anyMatch(date -> !snapshotDate.equals(date));
+        if (mixedDates) {
+            throw new BusinessException(
+                    ErrorCode.EXCHANGE_RATE_FETCH_FAILED,
+                    "Exchange-rate fetch returned inconsistent snapshot dates."
+            );
+        }
+        return snapshotDate;
     }
 
     /**
