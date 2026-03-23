@@ -13,6 +13,7 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.NoSuchElementException;
@@ -50,6 +51,7 @@ public class VerificationService {
      * @param request sadrži ID klijenta, tip operacije i ID povezanog entiteta
      * @return odgovor sa ID-om generisane sesije
      */
+    @Transactional
     public GenerateResponse generate(GenerateRequest request) {
         String rawCode = generateCode();
         String hashedCode = passwordEncoder.encode(rawCode);
@@ -86,6 +88,7 @@ public class VerificationService {
      * @param request sadrži ID sesije i kod za validaciju
      * @return odgovor koji ukazuje na rezultat validacije, trenutni status i preostale pokušaje
      */
+    @Transactional
     public ValidateResponse validate(ValidateRequest request) {
         VerificationSession session = repository.findById(request.getSessionId())
                 .orElseThrow(() -> new NoSuchElementException("Verification session not found"));
@@ -136,6 +139,7 @@ public class VerificationService {
      * @param sessionId ID sesije za proveru
      * @return trenutni status verifikacije
      */
+    @Transactional
     public VerificationStatus getStatus(Long sessionId) {
         VerificationSession session = repository.findById(sessionId)
                 .orElseThrow(() -> new NoSuchElementException("Verification session not found"));

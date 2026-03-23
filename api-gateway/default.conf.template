@@ -66,14 +66,18 @@ server {
         proxy_set_header X-Forwarded-Prefix /api/exchange;
     }
 
-    # Verification Service (all routes under /verification/ prefix)
-    location /verification/ {
+    location = /api/verification {
+        return 301 /api/verification/;
+    }
+
+    # Verification Service (all routes under /api/verification/ prefix)
+    location /api/verification/ {
         proxy_pass http://verification_service/;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Prefix /verification;
+        proxy_set_header X-Forwarded-Prefix /api/verification;
     }
 
     # Health check

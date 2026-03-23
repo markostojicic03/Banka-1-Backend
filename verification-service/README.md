@@ -26,7 +26,7 @@ Zatim pokrenite aplikaciju iz IntelliJ (`VerificationServiceApplication`). Aplik
 docker compose -f setup/docker-compose.yml up -d --build verification-service
 ```
 
-Servis je dostupan na `http://localhost:8086` (direktno) ili `http://localhost/verification/` (kroz API gateway).
+Servis je dostupan na `http://localhost:8086` (direktno) ili `http://localhost/api/verification/` (kroz API gateway).
 
 **Korisne komande:**
 ```bash
@@ -78,7 +78,7 @@ Servis pruža sledeće REST endpoint-e za upravljanje verifikacionim sesijama.
 Generiše novu verifikacionu sesiju sa nasumičnim 6-cifrenim kodom i šalje ga klijentu preko notifikacionog servisa.
 
 ```
-POST /verification/generate
+POST /generate
 Authorization: Bearer <jwt>
 Content-Type: application/json
 ```
@@ -109,7 +109,7 @@ Content-Type: application/json
 Validira uneti kod protiv postojeće sesije i vraća rezultat validacije.
 
 ```
-POST /verification/validate
+POST /validate
 Content-Type: application/json
 ```
 
@@ -139,7 +139,7 @@ Content-Type: application/json
 Vraća trenutni status verifikacione sesije.
 
 ```
-GET /verification/{sessionId}/status
+GET /{sessionId}/status
 Authorization: Bearer <jwt>
 ```
 

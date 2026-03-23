@@ -75,7 +75,7 @@ jacoco {
 }
 
 checkstyle {
-	configFile = rootProject.file("checkstyle.xml")
+	configFile = file("../checkstyle.xml")
 }
 
 tasks.withType<org.gradle.api.plugins.quality.Checkstyle>().configureEach {

@@ -6,13 +6,13 @@ import com.banka1.verificationService.dto.response.GenerateResponse;
 import com.banka1.verificationService.dto.response.ValidateResponse;
 import com.banka1.verificationService.model.enums.VerificationStatus;
 import com.banka1.verificationService.service.VerificationService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -20,7 +20,6 @@ import org.springframework.web.bind.annotation.RestController;
  * Pruža endpoint-e za generisanje, validaciju i proveru verifikacionih kodova.
  */
 @RestController
-@RequestMapping("/verification")
 @RequiredArgsConstructor
 public class VerificationController {
 
@@ -34,7 +33,7 @@ public class VerificationController {
      * @return odgovor sa ID-om sesije
      */
     @PostMapping("/generate")
-    public ResponseEntity<GenerateResponse> generate(@RequestBody GenerateRequest request) {
+    public ResponseEntity<GenerateResponse> generate(@Valid @RequestBody GenerateRequest request) {
         return ResponseEntity.ok(verificationService.generate(request));
     }
 
@@ -45,7 +44,7 @@ public class VerificationController {
      * @return odgovor koji ukazuje na rezultat validacije i status sesije
      */
     @PostMapping("/validate")
-    public ResponseEntity<ValidateResponse> validate(@RequestBody ValidateRequest request) {
+    public ResponseEntity<ValidateResponse> validate(@Valid @RequestBody ValidateRequest request) {
         return ResponseEntity.ok(verificationService.validate(request));
     }
 
