@@ -14,6 +14,7 @@ import com.banka1.account_service.rabbitMQ.EmailDto;
 import com.banka1.account_service.rabbitMQ.EmailType;
 import com.banka1.account_service.rabbitMQ.RabbitClient;
 import com.banka1.account_service.repository.AccountRepository;
+import com.banka1.account_service.rest_client.RestClientService;
 import com.banka1.account_service.rest_client.VerificationService;
 import com.banka1.account_service.service.ClientService;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +37,7 @@ public class ClientServiceImplementation implements ClientService {
 
     private final VerificationService verificationService;
     private final RabbitClient rabbitClient;
+    private final RestClientService restClientService;
 
 
 //    @Override
@@ -84,6 +86,7 @@ public class ClientServiceImplementation implements ClientService {
         return editName(jwt, editAccountNameDto, account);
     }
 
+    @Transactional
     @Override
     public String editAccountName(Jwt jwt, String accountNumber, EditAccountNameDto editAccountNameDto) {
         Account account=accountRepository.findByBrojRacuna(accountNumber).orElse(null);
@@ -108,6 +111,7 @@ public class ClientServiceImplementation implements ClientService {
         return editLimit(jwt, editAccountLimitDto, account);
     }
 
+    @Transactional
     @Override
     public String editAccountLimit(Jwt jwt, String accountNumber, EditAccountLimitDto editAccountLimitDto) {
         Account account=accountRepository.findByBrojRacuna(accountNumber).orElse(null);
@@ -152,6 +156,7 @@ public class ClientServiceImplementation implements ClientService {
     }
 
     @Override
+    @Transactional
     public AccountDetailsResponseDto getDetails(Jwt jwt, String accountNumber) {
         Account account=accountRepository.findByBrojRacuna(accountNumber).orElse(null);
         validation(account,jwt);
@@ -165,6 +170,7 @@ public class ClientServiceImplementation implements ClientService {
 
     //todo dosta gluposti u vezi ovoga sto se tice Card i Loan servica
     @Override
+    @Transactional
     public String editStatus(Jwt jwt, String accountNumber, EditStatus editStatus) {
         Account account=accountRepository.findByBrojRacuna(accountNumber).orElse(null);
         validation(account,jwt);
@@ -172,7 +178,9 @@ public class ClientServiceImplementation implements ClientService {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                //rabbitClient.sendEmailNotification(new EmailDto(clientInfoResponseDto.getUsername(),clientInfoResponseDto.getEmail(), EmailType.ACCOUNT_CREATED));
+                if(account.getUsername()==null || account.getEmail()==null)
+                    throw new RuntimeException("Ne sme null");
+                rabbitClient.sendEmailNotification(new EmailDto(account.getUsername(),account.getEmail(), EmailType.ACCOUNT_DEACTIVATED));
 
             }
         });

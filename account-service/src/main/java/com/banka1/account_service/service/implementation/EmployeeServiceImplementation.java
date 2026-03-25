@@ -11,7 +11,6 @@ import com.banka1.account_service.dto.request.FxDto;
 import com.banka1.account_service.dto.request.UpdateCardDto;
 import com.banka1.account_service.dto.response.AccountSearchResponseDto;
 import com.banka1.account_service.dto.response.ClientInfoResponseDto;
-import com.banka1.account_service.dto.response.ClientResponseDto;
 import com.banka1.account_service.rabbitMQ.EmailDto;
 import com.banka1.account_service.rabbitMQ.EmailType;
 import com.banka1.account_service.rabbitMQ.RabbitClient;
@@ -19,12 +18,10 @@ import com.banka1.account_service.repository.AccountRepository;
 import com.banka1.account_service.repository.CompanyRepository;
 import com.banka1.account_service.repository.CurrencyRepository;
 import com.banka1.account_service.repository.SifraDelatnostiRepository;
-import com.banka1.account_service.rest_client.ClientService;
+import com.banka1.account_service.rest_client.RestClientService;
 import com.banka1.account_service.service.EmployeeService;
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
@@ -35,14 +32,13 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.stream.Collectors;
 
 
 //@RequiredArgsConstructor
 @Service
 public class EmployeeServiceImplementation implements EmployeeService {
     private final Random random;
-    private final ClientService clientService;
+    private final RestClientService restClientService;
     private final AccountRepository accountRepository;
     @Value("${banka.security.id}")
     private String appPropertiesId;
@@ -51,9 +47,9 @@ public class EmployeeServiceImplementation implements EmployeeService {
     private final CompanyRepository companyRepository;
     private final RabbitClient rabbitClient;
 
-    public EmployeeServiceImplementation(@Value("${my.random.seed}") Long seed, ClientService clientService, CurrencyRepository currencyRepository, SifraDelatnostiRepository sifraDelatnostiRepository, CompanyRepository companyRepository, AccountRepository accountRepository, RabbitClient rabbitClient)
+    public EmployeeServiceImplementation(@Value("${my.random.seed}") Long seed, RestClientService restClientService, CurrencyRepository currencyRepository, SifraDelatnostiRepository sifraDelatnostiRepository, CompanyRepository companyRepository, AccountRepository accountRepository, RabbitClient rabbitClient)
     {
-        this.clientService = clientService;
+        this.restClientService = restClientService;
         this.rabbitClient = rabbitClient;
         this.random=new Random();
         this.currencyRepository=currencyRepository;
@@ -115,9 +111,9 @@ public class EmployeeServiceImplementation implements EmployeeService {
     private ClientInfoResponseDto resolveClientId(Long id, String jmbg) {
         ClientInfoResponseDto clientInfoResponseDto;
         if (id != null)
-            clientInfoResponseDto= clientService.getUser(id);
+            clientInfoResponseDto= restClientService.getUser(id);
         else
-            clientInfoResponseDto=clientService.getUser(jmbg);
+            clientInfoResponseDto= restClientService.getUser(jmbg);
         if(clientInfoResponseDto==null)
             throw new RuntimeException("Greska sa komunikacijom izmedju servisa");
         return clientInfoResponseDto;

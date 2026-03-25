@@ -15,7 +15,7 @@ public class VerificationService {
     public ValidateResponse validate(ValidateRequest request)
     {
         return restClient.post()
-                .uri("/validate") // ili full URL: http://localhost:808X/validate
+                .uri("/validate")
                 .body(request)
                 .retrieve()
                 .body(ValidateResponse.class);

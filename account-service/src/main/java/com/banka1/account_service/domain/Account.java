@@ -4,6 +4,7 @@ import com.banka1.account_service.domain.enums.AccountOwnershipType;
 import com.banka1.account_service.domain.enums.Status;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -44,6 +45,11 @@ public abstract class Account extends BaseEntity{
     @NotBlank
     @Column(nullable = false)
     private String prezimeVlasnikaRacuna;
+    @Email
+    @Column(unique = true)
+    private String email;
+    @Column(unique = true)
+    private String username;
     @NotBlank
     @Column(nullable = false)
     private String nazivRacuna;
