@@ -1,6 +1,7 @@
 package com.banka1.account_service.controller;
 
 import com.banka1.account_service.dto.request.PaymentDto;
+import com.banka1.account_service.dto.response.InfoResponseDto;
 import com.banka1.account_service.dto.response.UpdatedBalanceResponseDto;
 import com.banka1.account_service.service.AccountService;
 import jakarta.validation.Valid;
@@ -34,6 +35,11 @@ public class AccountController {
     @PostMapping("/transfer")
     public ResponseEntity<UpdatedBalanceResponseDto> transfer(@AuthenticationPrincipal Jwt jwt, @RequestBody @Valid PaymentDto paymentDto) {
         return new ResponseEntity<>(accountService.transfer(paymentDto),HttpStatus.OK);
+    }
+    @GetMapping("/info")
+    public ResponseEntity<InfoResponseDto> info(@AuthenticationPrincipal Jwt jwt,@RequestParam String fromBankNumber,@RequestParam String toBankNumber)
+    {
+        return new ResponseEntity<>(accountService.info(jwt,fromBankNumber,toBankNumber),HttpStatus.OK);
     }
 
 }

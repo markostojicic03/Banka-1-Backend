@@ -3,6 +3,7 @@ package com.banka1.account_service.service.implementation;
 import com.banka1.account_service.domain.Account;
 import com.banka1.account_service.domain.enums.Status;
 import com.banka1.account_service.dto.request.PaymentDto;
+import com.banka1.account_service.dto.response.InfoResponseDto;
 import com.banka1.account_service.dto.response.UpdatedBalanceResponseDto;
 import com.banka1.account_service.repository.AccountRepository;
 import com.banka1.account_service.service.AccountService;
@@ -86,5 +87,21 @@ public class AccountServiceImplementation implements AccountService {
         if(!from.getVlasnik().equals(to.getVlasnik()))
             throw new IllegalArgumentException("Transfer se moze odvijati samo za racune istog vlasnika");
         return execute(paymentDto, from, to, bankSender, bankTarget);
+    }
+
+    @Override
+    public InfoResponseDto info(Jwt jwt, String fromAccountNumber, String toAccountNumber) {
+        Account fromAccount=accountRepository.findByBrojRacuna(fromAccountNumber).orElse(null);
+        if(fromAccount==null)
+            throw new IllegalArgumentException("Ne postoji from racun");
+        if(fromAccount.getStatus()==Status.INACTIVE)
+            throw new IllegalArgumentException("FromAccount nije aktivan");
+        Account toAccount=accountRepository.findByBrojRacuna(toAccountNumber).orElse(null);
+        if(toAccount==null)
+            throw new IllegalArgumentException("Ne postoji to racun");
+        if(toAccount.getStatus()==Status.INACTIVE)
+            throw new IllegalArgumentException("ToAccount nije aktivan");
+        return new InfoResponseDto(fromAccount.getCurrency().getOznaka(), toAccount.getCurrency().getOznaka(), fromAccount.getVlasnik(), toAccount.getVlasnik());
+
     }
 }

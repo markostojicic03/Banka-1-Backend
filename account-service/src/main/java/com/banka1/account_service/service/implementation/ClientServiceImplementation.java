@@ -133,7 +133,7 @@ public class ClientServiceImplementation implements ClientService {
         }
 
         ValidateResponse validateResponse=verificationService.validate(new ValidateRequest(editAccountLimitDto.getVerificationSessionId(),editAccountLimitDto.getVerificationCode()));
-        if(validateResponse.getStatus()!= VerificationStatus.VERIFIED)
+        if(validateResponse==null || validateResponse.getStatus()!= VerificationStatus.VERIFIED)
             throw new BusinessException(ErrorCode.VERIFICATION_FAILED,ErrorCode.VERIFICATION_FAILED.getTitle());
         if(editAccountLimitDto.getTipLimita() == EditAccountLimitDto.TipLimita.DNEVNI) {
             account.setDnevniLimit(editAccountLimitDto.getAccountLimit());
