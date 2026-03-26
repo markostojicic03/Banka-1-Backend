@@ -4,6 +4,7 @@ import com.banka1.verificationService.advice.GlobalExceptionHandler;
 import com.banka1.verificationService.dto.request.GenerateRequest;
 import com.banka1.verificationService.dto.request.ValidateRequest;
 import com.banka1.verificationService.dto.response.GenerateResponse;
+import com.banka1.verificationService.dto.response.StatusResponse;
 import com.banka1.verificationService.dto.response.ValidateResponse;
 import com.banka1.verificationService.model.enums.VerificationStatus;
 import com.banka1.verificationService.service.VerificationService;
@@ -73,12 +74,13 @@ class VerificationControllerWebMvcTest {
     }
 
     @Test
-    void getStatusUsesRootStatusRoute() throws Exception {
-        when(verificationService.getStatus(15L)).thenReturn(VerificationStatus.PENDING);
+    void getStatusReturnsSessionIdAndStatus() throws Exception {
+        when(verificationService.getStatus(15L)).thenReturn(new StatusResponse(15L, VerificationStatus.PENDING));
 
         mockMvc.perform(get("/15/status"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").value("PENDING"));
+                .andExpect(jsonPath("$.sessionId").value(15))
+                .andExpect(jsonPath("$.status").value("PENDING"));
     }
 
     @Test

@@ -6,6 +6,7 @@
 build/
 out/
 /.gradle-local/
+/.gradle-user-home
 
 # Maven
 target/

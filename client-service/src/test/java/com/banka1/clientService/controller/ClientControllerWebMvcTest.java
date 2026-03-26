@@ -183,11 +183,46 @@ class ClientControllerWebMvcTest {
 
     @Test
     void getClientIdByJmbgReturnsId() throws Exception {
-        when(clientService.getInfoByJmbg("1234567890123")).thenReturn(new ClientInfoResponseDto(42L,"Pickka","Pickic"));
+        when(clientService.getInfoByJmbg("1234567890123")).thenReturn(new ClientInfoResponseDto(42L, "Pickka", "Pickic", null, null, null, null, null, null, null, false));
 
         mockMvc.perform(get("/customers/jmbg/1234567890123"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(42));
+    }
+
+    @Test
+    void getClientByIdReturnsOk() throws Exception {
+        ClientInfoResponseDto info = new ClientInfoResponseDto(5L, "Ana", "Anic", "ana@banka.com",
+                "1234567890123", "+381601234567", "Ulica 1", Pol.Z, 946684800000L, ClientRole.CLIENT_BASIC, true);
+        when(clientService.getInfoById(5L)).thenReturn(info);
+
+        mockMvc.perform(get("/customers/5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(5))
+                .andExpect(jsonPath("$.name").value("Ana"))
+                .andExpect(jsonPath("$.email").value("ana@banka.com"));
+    }
+
+    @Test
+    void getClientByIdReturnsNotFoundWhenMissing() throws Exception {
+        doThrow(new BusinessException(ErrorCode.CLIENT_NOT_FOUND, "ID: 99"))
+                .when(clientService).getInfoById(99L);
+
+        mockMvc.perform(get("/customers/99"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("ERR_CLIENT_001"));
+    }
+
+    @Test
+    void createClientReturnsBadRequestForInvalidPhoneFormat() throws Exception {
+        ClientCreateRequestDto request = validCreateRequest();
+        request.setBrojTelefona("not-a-phone");
+
+        mockMvc.perform(post("/customers")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.validationErrors.brojTelefona").exists());
     }
 
     @Test

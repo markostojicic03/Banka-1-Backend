@@ -308,6 +308,35 @@ class ClientServiceImplementationTest {
         verify(klijentRepository, never()).saveAndFlush(any());
     }
 
+    // ── getInfoById ───────────────────────────────────────────────────────────
+
+    @Test
+    void getInfoByIdThrowsWhenNotFound() {
+        when(klijentRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> clientService.getInfoById(99L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.CLIENT_NOT_FOUND);
+    }
+
+    @Test
+    void getInfoByIdReturnsCorrectDto() {
+        Klijent existing = klijent("marko@banka.com", "1234567890123");
+        existing.setId(7L);
+        existing.setAktivan(true);
+
+        when(klijentRepository.findById(7L)).thenReturn(Optional.of(existing));
+
+        ClientInfoResponseDto result = clientService.getInfoById(7L);
+
+        assertThat(result.getId()).isEqualTo(7L);
+        assertThat(result.getName()).isEqualTo("Marko");
+        assertThat(result.getLastName()).isEqualTo("Markovic");
+        assertThat(result.getEmail()).isEqualTo("marko@banka.com");
+        assertThat(result.isActive()).isTrue();
+    }
+
     @Test
     void createClientAfterCompletionRollbackDoesNotSendEmail() {
         ClientCreateRequestDto dto = createRequest();

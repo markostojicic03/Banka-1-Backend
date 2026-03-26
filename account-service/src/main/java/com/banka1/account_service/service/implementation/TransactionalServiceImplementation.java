@@ -55,12 +55,12 @@ public class TransactionalServiceImplementation implements TransactionalService 
             }
             credit(to, paymentDto.getToAmount());
         } else {
-            // Cross-currency: commission is in source currency — deducted from sender, bank keeps it
-            // Bank exchanges fromAmount at its rate: receives fromAmount+commission in source, pays toAmount in target
-            debit(from, paymentDto.getFromAmount().add(commission));
-            credit(bankSender, paymentDto.getFromAmount().add(commission));
+            // Cross-currency: commission is in target currency — deducted from recipient, bank keeps it
+            // Sender pays fromAmount; bank pays toAmount in target currency but keeps commission
+            debit(from, paymentDto.getFromAmount());
+            credit(bankSender, paymentDto.getFromAmount());
             debit(bankTarget, paymentDto.getToAmount());
-            credit(to, paymentDto.getToAmount());
+            credit(to, paymentDto.getToAmount().subtract(commission));
         }
         return new UpdatedBalanceResponseDto(from.getStanje(), to.getStanje());
     }

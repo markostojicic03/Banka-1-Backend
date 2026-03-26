@@ -55,7 +55,7 @@ class AccountControllerUnitTest {
     @Test
     void infoReturnsOkAndDelegates() {
         AccountController controller = new AccountController(accountService);
-        InfoResponseDto expected = new InfoResponseDto(CurrencyCode.RSD, CurrencyCode.EUR, 1L, 2L);
+        InfoResponseDto expected = new InfoResponseDto(CurrencyCode.RSD, CurrencyCode.EUR, 1L, 2L, null, null);
         when(accountService.info(null, "111000100000000011", "111000100000000012")).thenReturn(expected);
 
         ResponseEntity<InfoResponseDto> response = controller.info(null, "111000100000000011", "111000100000000012");

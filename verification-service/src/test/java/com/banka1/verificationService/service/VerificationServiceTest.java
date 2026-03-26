@@ -3,6 +3,7 @@ package com.banka1.verificationService.service;
 import com.banka1.verificationService.dto.request.GenerateRequest;
 import com.banka1.verificationService.dto.request.ValidateRequest;
 import com.banka1.verificationService.dto.response.GenerateResponse;
+import com.banka1.verificationService.dto.response.StatusResponse;
 import com.banka1.verificationService.dto.response.ValidateResponse;
 import com.banka1.verificationService.exception.BusinessException;
 import com.banka1.verificationService.exception.ErrorCode;
@@ -244,9 +245,9 @@ class VerificationServiceTest {
         session.setExpiresAt(LocalDateTime.now().minusSeconds(1));
         when(repository.findById(15L)).thenReturn(Optional.of(session));
 
-        VerificationStatus status = verificationService.getStatus(15L);
+        StatusResponse statusResponse = verificationService.getStatus(15L);
 
-        assertThat(status).isEqualTo(VerificationStatus.EXPIRED);
+        assertThat(statusResponse.getStatus()).isEqualTo(VerificationStatus.EXPIRED);
         verify(repository).save(session);
     }
 
