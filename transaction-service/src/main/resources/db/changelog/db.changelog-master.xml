@@ -9,4 +9,8 @@
         <sqlFile path="db/changelog/001-initial-schema.sql" splitStatements="true"/>
     </changeSet>
 
+    <changeSet id="002-seed-data" author="account-service">
+        <sqlFile path="db/changelog/002-seed-data.sql" splitStatements="true"/>
+    </changeSet>
+
 </databaseChangeLog>
