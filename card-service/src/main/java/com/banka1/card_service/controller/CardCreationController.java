@@ -38,21 +38,21 @@ public class CardCreationController {
      * @return created card
      */
     @PostMapping("/auto")
-    @PreAuthorize("hasRole('SERVICE')")
+    @PreAuthorize("hasAnyRole('SERVICE', 'ADMIN')")
     public ResponseEntity<?> autoCreateCard(@RequestBody @Valid AutoCardCreationRequestDto body) {
         CardCreationResponseDto response = cardRequestService.createAutomaticCard(body);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     /**
-     * A card is MANUALLY created for the user, when the user asks for it
+     * Creates a personal card after the client already completed verification in verification-service.
      *
      * @param jwt JWT of the authenticated client
-     * @param body request payload
-     * @return pending verification response or created card response
+     * @param body request payload including {@code verificationId}
+     * @return created card response
      */
     @PostMapping("/request")
-    @PreAuthorize("hasRole('CLIENT_BASIC')")
+    @PreAuthorize("hasAnyRole('CLIENT_BASIC', 'ADMIN')")
     public ResponseEntity<CardRequestResponseDto> requestBasicCard(
             @AuthenticationPrincipal Jwt jwt,
             @RequestBody @Valid ClientCardRequestDto body
@@ -63,14 +63,14 @@ public class CardCreationController {
     }
 
     /**
-     * MANUALLY Starts or completes a business-account card request for the owner or an authorized person.
+     * Creates a business-account card for the owner or an authorized person after external verification.
      *
      * @param jwt JWT of the authenticated client
-     * @param body request payload
-     * @return pending verification response or created card response
+     * @param body request payload including {@code verificationId}
+     * @return created card response
      */
     @PostMapping("/request/business")
-    @PreAuthorize("hasRole('CLIENT_BASIC')")
+    @PreAuthorize("hasAnyRole('CLIENT_BASIC', 'ADMIN')")
     public ResponseEntity<CardRequestResponseDto> requestBusinessCard(
             @AuthenticationPrincipal Jwt jwt,
             @RequestBody @Valid BusinessCardRequestDto body

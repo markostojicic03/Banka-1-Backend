@@ -40,4 +40,16 @@ public class RestClientConfig {
                 .requestInterceptor(new JwtAuthInterceptor(jwtService))
                 .build();
     }
+
+    @Bean
+    public RestClient verificationClient(
+            RestClient.Builder builder,
+            @Value("${services.verification.url}") String baseUrl,
+            JWTService jwtService
+    ) {
+        return builder
+                .baseUrl(baseUrl)
+                .requestInterceptor(new JwtAuthInterceptor(jwtService))
+                .build();
+    }
 }

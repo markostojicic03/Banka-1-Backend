@@ -20,11 +20,11 @@ public interface CardRequestService {
     CardCreationResponseDto createAutomaticCard(AutoCardCreationRequestDto request);
 
     /**
-     * Starts or completes a personal-account card request.
+     * Creates a personal-account card after verification was completed externally.
      *
      * @param authenticatedClientId authenticated client ID
      * @param request request payload
-     * @return pending or completed flow response
+     * @return completed flow response
      */
     CardRequestResponseDto processManualCardRequest(Long authenticatedClientId, ClientCardRequestDto request);
 

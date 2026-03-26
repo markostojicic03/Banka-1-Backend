@@ -1,6 +1,6 @@
 -- liquibase formatted sql
 
--- changeset 1
+-- changeset card-service:1
 CREATE TABLE cards (
     id BIGSERIAL PRIMARY KEY,
     version BIGINT DEFAULT 0,
@@ -18,25 +18,25 @@ CREATE TABLE cards (
     status VARCHAR(20) NOT NULL
 );
 
--- changeset 2
+-- changeset card-service:2
 CREATE INDEX idx_cards_account_number ON cards (account_number);
 
--- changeset 3
+-- changeset card-service:3
 CREATE INDEX idx_cards_status ON cards (status);
 
--- changeset 6
+-- changeset card-service:6
 ALTER TABLE cards ADD COLUMN client_id BIGINT NOT NULL DEFAULT 0;
 
--- changeset 7
+-- changeset card-service:7
 CREATE INDEX idx_cards_client_id ON cards (client_id);
 
--- changeset 8
+-- changeset card-service:8
 ALTER TABLE cards ADD COLUMN authorized_person_id BIGINT;
 
--- changeset 9
+-- changeset card-service:9
 CREATE INDEX idx_cards_authorized_person_id ON cards (authorized_person_id);
 
--- changeset 10
+-- changeset card-service:10
 CREATE TABLE authorized_persons (
     id BIGSERIAL PRIMARY KEY,
     version BIGINT DEFAULT 0,
@@ -52,7 +52,7 @@ CREATE TABLE authorized_persons (
     address VARCHAR(255) NOT NULL
 );
 
--- changeset 11
+-- changeset card-service:11
 CREATE TABLE authorized_person_card_ids (
     authorized_person_id BIGINT NOT NULL,
     card_id BIGINT NOT NULL,
@@ -61,7 +61,7 @@ CREATE TABLE authorized_person_card_ids (
         FOREIGN KEY (authorized_person_id) REFERENCES authorized_persons (id)
 );
 
--- changeset 12
+-- changeset card-service:12
 CREATE TABLE card_request_verifications (
     id BIGSERIAL PRIMARY KEY,
     version BIGINT DEFAULT 0,
@@ -87,11 +87,11 @@ CREATE TABLE card_request_verifications (
     authorized_address VARCHAR(255)
 );
 
--- changeset 13
+-- changeset card-service:13
 CREATE INDEX idx_card_req_ver_client_id ON card_request_verifications (client_id);
 
--- changeset 14
+-- changeset card-service:14
 CREATE INDEX idx_card_req_ver_account_number ON card_request_verifications (account_number);
 
--- changeset 15
+-- changeset card-service:15
 CREATE INDEX idx_card_req_ver_expires_at ON card_request_verifications (expires_at);

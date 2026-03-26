@@ -67,20 +67,26 @@ class CardCreationControllerWebMvcTest {
     }
 
     @Test
-    void requestCardReturnsAcceptedWhenVerificationIsPending() throws Exception {
+    void requestCardReturnsCreatedWhenVerificationIsAlreadyApproved() throws Exception {
         String requestBody = """
                 {
                   "accountNumber": "265000000000123456",
                   "cardBrand": "VISA",
-                  "cardLimit": 1500
+                  "cardLimit": 1500,
+                  "verificationId": 77
                 }
                 """;
 
         CardRequestResponseDto response = new CardRequestResponseDto(
-                "PENDING_VERIFICATION",
-                "Verification required.",
-                11L,
-                null
+                "COMPLETED",
+                "Card created.",
+                null,
+                new CardCreationResponseDto(
+                        "5798123456785571",
+                        "123",
+                        LocalDate.of(2031, 3, 20),
+                        "Visa Debit"
+                )
         );
         when(cardRequestService.processManualCardRequest(eq(1L), org.mockito.ArgumentMatchers.any()))
                 .thenReturn(response);
@@ -90,8 +96,8 @@ class CardCreationControllerWebMvcTest {
                                 .jwt(jwt -> jwt.claim("id", 1L)))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
-                .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.verificationRequestId").value(11L));
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.createdCard.cardNumber").value("5798123456785571"));
 
         verify(cardRequestService).processManualCardRequest(eq(1L), org.mockito.ArgumentMatchers.any());
     }
@@ -100,8 +106,11 @@ class CardCreationControllerWebMvcTest {
     void requestBusinessCardReturnsCreatedWhenCardIsIssued() throws Exception {
         String requestBody = """
                 {
-                  "verificationRequestId": 15,
-                  "verificationCode": "654321"
+                  "accountNumber": "265000000000999999",
+                  "recipientType": "OWNER",
+                  "cardBrand": "VISA",
+                  "cardLimit": 2500,
+                  "verificationId": 15
                 }
                 """;
 

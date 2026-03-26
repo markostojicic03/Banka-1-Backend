@@ -9,6 +9,9 @@ Implemented features:
 - three-digit CVV generation with hashed storage only
 - automatic expiration dates set to 5 years after creation
 - card status and spending-limit persistence
+- REST endpoints for automatic, personal, and business card creation
+- manual card creation guarded by `verification-service` status checks
+- business-card issuance for account owners and authorized persons
 - unit tests for generation rules and defaults
 
 For shared project setup, git hooks, and infrastructure details, see the [root README](../README.md).
@@ -24,12 +27,13 @@ Implemented now:
 - Luhn checksum support
 - CVV generation plus hashing
 - card-creation orchestration
+- REST endpoints for card creation flows
+- account ownership checks against `account-service`
+- verification checks against `verification-service`
 - exception model for business validation failures
 
 Planned later:
 
-- REST endpoints
-- account ownership verification against other services
 - block, unblock, and deactivate flows
 - masked card responses for clients
 
@@ -159,6 +163,97 @@ Persisted card:
 One-time return value:
   plainCvv:       123
 ```
+
+## Manual Request Flow
+
+Manual card creation is now a single-step flow for both personal and business accounts.
+
+The caller must first complete the external verification flow in `verification-service`.
+`card-service` then receives the final request together with `verificationId` and calls:
+
+```text
+GET /{verificationId}/status
+```
+
+Only verification sessions with status `VERIFIED` are accepted. Any other status causes a business error response.
+
+### Personal Card Request
+
+Endpoint:
+
+```text
+POST /request
+```
+
+Example request:
+
+```json
+{
+  "accountNumber": "265000000000123456",
+  "cardBrand": "VISA",
+  "cardLimit": 1500.00,
+  "verificationId": 77
+}
+```
+
+Behavior:
+
+1. validate the request payload
+2. verify that the authenticated client owns the account
+3. reject business accounts on this endpoint
+4. require `verification-service` status `VERIFIED`
+5. enforce the personal rule: at most 2 active cards per account for the owner
+6. create the card and send the success notification after commit
+
+### Business Card Request
+
+Endpoint:
+
+```text
+POST /request/business
+```
+
+Owner example:
+
+```json
+{
+  "accountNumber": "265000000000999999",
+  "recipientType": "OWNER",
+  "cardBrand": "DINACARD",
+  "cardLimit": 2500.00,
+  "verificationId": 88
+}
+```
+
+Authorized person example:
+
+```json
+{
+  "accountNumber": "265000000000999999",
+  "recipientType": "AUTHORIZED_PERSON",
+  "cardBrand": "MASTERCARD",
+  "cardLimit": 800.00,
+  "verificationId": 99,
+  "authorizedPerson": {
+    "firstName": "Ana",
+    "lastName": "Anic",
+    "dateOfBirth": "1994-02-10",
+    "gender": "FEMALE",
+    "email": "ana@example.com",
+    "phone": "0601234567",
+    "address": "Adresa 1"
+  }
+}
+```
+
+Behavior:
+
+1. validate the request payload and recipient type
+2. verify that the authenticated client owns a business account
+3. require `verification-service` status `VERIFIED`
+4. resolve an existing authorized person when identity matches or create one from the inline payload
+5. enforce the business rule: at most 1 active card per person on the same account
+6. create the card and notify the owner, plus the authorized person when applicable
 
 ## Running Locally
 

@@ -2,13 +2,9 @@ FROM gradle:8.14.3-jdk21-alpine AS builder
 
 WORKDIR /app
 
-COPY card-service ./card-service
-COPY security-lib ./security-lib
-COPY company-observability-starter ./company-observability-starter
+COPY . .
 
-WORKDIR /app/card-service
-
-RUN gradle build --no-daemon -x test -x checkstyleMain -x checkstyleTest
+RUN gradle :card-service:bootJar --no-daemon
 
 FROM eclipse-temurin:21-jre-alpine
 
