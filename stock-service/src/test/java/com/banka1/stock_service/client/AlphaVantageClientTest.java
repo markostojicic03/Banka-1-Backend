@@ -3,6 +3,7 @@ package com.banka1.stock_service.client;
 import com.banka1.stock_service.config.StockMarketDataProperties;
 import com.banka1.stock_service.dto.AlphaVantageCompanyOverviewResponse;
 import com.banka1.stock_service.dto.AlphaVantageDailyResponse;
+import com.banka1.stock_service.dto.AlphaVantageForexExchangeRateResponse;
 import com.banka1.stock_service.dto.AlphaVantageQuoteResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -122,6 +123,30 @@ class AlphaVantageClientTest {
         assertThat(response.name()).isEqualTo("Apple Inc.");
         assertThat(response.sharesOutstanding()).isEqualTo(15_550_061_000L);
         assertThat(response.dividendYield()).isEqualByComparingTo(new BigDecimal("0.0044"));
+    }
+
+    @Test
+    void fetchExchangeRateParsesSuccessfulResponse() {
+        server.expect(requestTo(containsString(
+                        "/query?function=CURRENCY_EXCHANGE_RATE&from_currency=EUR&to_currency=USD&apikey=demo-key"
+                )))
+                .andRespond(withSuccess("""
+                        {
+                          "Realtime Currency Exchange Rate": {
+                            "1. From_Currency Code": "EUR",
+                            "3. To_Currency Code": "USD",
+                            "5. Exchange Rate": "1.08350000",
+                            "6. Last Refreshed": "2026-04-08 10:15:00"
+                          }
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        AlphaVantageForexExchangeRateResponse response = alphaVantageClient.fetchExchangeRate("EUR", "USD");
+
+        assertThat(response.baseCurrency()).isEqualTo("EUR");
+        assertThat(response.quoteCurrency()).isEqualTo("USD");
+        assertThat(response.exchangeRate()).isEqualByComparingTo(new BigDecimal("1.08350000"));
+        assertThat(response.lastRefreshed()).hasToString("2026-04-08T10:15");
     }
 
     @Test

@@ -4,6 +4,7 @@ import com.banka1.stock_service.config.StockMarketDataProperties;
 import com.banka1.stock_service.dto.AlphaVantageCompanyOverviewResponse;
 import com.banka1.stock_service.dto.AlphaVantageDailyResponse;
 import com.banka1.stock_service.dto.AlphaVantageDailyValue;
+import com.banka1.stock_service.dto.AlphaVantageForexExchangeRateResponse;
 import com.banka1.stock_service.dto.AlphaVantageQuoteResponse;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
@@ -15,6 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.Comparator;
 import java.util.List;
@@ -36,6 +38,7 @@ public class AlphaVantageClient {
     private static final String FUNCTION_GLOBAL_QUOTE = "GLOBAL_QUOTE";
     private static final String FUNCTION_TIME_SERIES_DAILY = "TIME_SERIES_DAILY";
     private static final String FUNCTION_OVERVIEW = "OVERVIEW";
+    private static final String FUNCTION_CURRENCY_EXCHANGE_RATE = "CURRENCY_EXCHANGE_RATE";
 
     private final RestClient stockMarketDataRestClient;
     private final StockMarketDataProperties stockMarketDataProperties;
@@ -124,6 +127,30 @@ public class AlphaVantageClient {
         );
     }
 
+    /**
+     * Fetches the latest exchange rate for one ordered currency pair.
+     *
+     * @param baseCurrency base currency code
+     * @param quoteCurrency quote currency code
+     * @return normalized FX exchange-rate response
+     */
+    public AlphaVantageForexExchangeRateResponse fetchExchangeRate(String baseCurrency, String quoteCurrency) {
+        Map<String, Object> body = executeCurrencyExchangeRate(baseCurrency, quoteCurrency);
+        Map<String, Object> rateNode = readRequiredMap(body, "Realtime Currency Exchange Rate");
+        String providerBaseCurrency = readRequiredString(rateNode, "1. From_Currency Code");
+        String providerQuoteCurrency = readRequiredString(rateNode, "3. To_Currency Code");
+
+        validateExpectedCurrency(providerBaseCurrency, baseCurrency, "FX base currency");
+        validateExpectedCurrency(providerQuoteCurrency, quoteCurrency, "FX quote currency");
+
+        return new AlphaVantageForexExchangeRateResponse(
+                providerBaseCurrency,
+                providerQuoteCurrency,
+                readRequiredDecimal(rateNode, "5. Exchange Rate"),
+                readRequiredLocalDateTime(rateNode, "6. Last Refreshed")
+        );
+    }
+
     private Map<String, Object> executeFunction(String function, String ticker, String... extraQueryParamPairs) {
         String apiKey = requireApiKey();
 
@@ -142,6 +169,38 @@ public class AlphaVantageClient {
 
                         return uriBuilder.build();
                     })
+                    .retrieve()
+                    .body(Map.class);
+
+            validateStandardErrorPayload(body);
+            return Objects.requireNonNull(body, "body must not be null");
+        } catch (ResourceAccessException exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.GATEWAY_TIMEOUT,
+                    "Alpha Vantage request timed out.",
+                    exception
+            );
+        } catch (RestClientException exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "Failed to connect to Alpha Vantage.",
+                    exception
+            );
+        }
+    }
+
+    private Map<String, Object> executeCurrencyExchangeRate(String baseCurrency, String quoteCurrency) {
+        String apiKey = requireApiKey();
+
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> body = stockMarketDataRestClient.get()
+                    .uri(uriBuilder -> uriBuilder.path(QUERY_PATH)
+                            .queryParam("function", FUNCTION_CURRENCY_EXCHANGE_RATE)
+                            .queryParam("from_currency", baseCurrency)
+                            .queryParam("to_currency", quoteCurrency)
+                            .queryParam("apikey", apiKey)
+                            .build())
                     .retrieve()
                     .body(Map.class);
 
@@ -208,6 +267,15 @@ public class AlphaVantageClient {
             throw new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY,
                     "Alpha Vantage returned unexpected symbol %s for %s endpoint.".formatted(actualSymbol, endpointName)
+            );
+        }
+    }
+
+    private void validateExpectedCurrency(String actualCurrency, String expectedCurrency, String fieldName) {
+        if (!expectedCurrency.equalsIgnoreCase(actualCurrency)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "Alpha Vantage returned unexpected value %s for %s.".formatted(actualCurrency, fieldName)
             );
         }
     }
@@ -317,6 +385,23 @@ public class AlphaVantageClient {
                     HttpStatus.BAD_GATEWAY,
                     "Alpha Vantage response contains invalid date field " + fieldName + "."
             );
+        }
+    }
+
+    private LocalDateTime readRequiredLocalDateTime(Map<String, Object> node, String fieldName) {
+        String value = readRequiredString(node, fieldName);
+
+        try {
+            return LocalDateTime.parse(value.replace(" ", "T"));
+        } catch (DateTimeParseException ignored) {
+            try {
+                return LocalDate.parse(value).atStartOfDay();
+            } catch (DateTimeParseException exception) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_GATEWAY,
+                        "Alpha Vantage response contains invalid datetime field " + fieldName + "."
+                );
+            }
         }
     }
 }

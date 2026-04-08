@@ -8,7 +8,7 @@ The service currently provides:
 - PostgreSQL connectivity and Liquibase bootstrap migrations
 - persisted stock exchange reference data with CSV import support
 - persisted futures contract reference data with CSV import support
-- persisted FX pair reference data with CSV import support
+- persisted FX pair reference data with API import support
 - persisted stock option reference data linked to underlying stocks
 - persisted current and daily listing market data with exchange-linked snapshots
 - stock exchange work-time/status endpoints
@@ -45,7 +45,7 @@ The service uses:
 - `Listing` and `ListingDailyPriceInfo` JPA entities and repositories
 - startup/admin CSV import flow for stock exchange reference data
 - startup CSV import flow for futures contract reference data
-- startup CSV import flow for FX pair reference data
+- startup API import flow for FX pair reference data
 - stock exchange listing and market-status API
 - stock exchange active-toggle endpoint for testing
 - administrative stock market-data refresh endpoint
@@ -88,7 +88,7 @@ The most important parts of the service are:
 - `controller` bootstrap REST endpoints
 - `repository` persistence access for stock exchanges, stocks, futures contracts, FX pairs, stock options, and listings
 - `domain` persisted stock exchange, stock, futures contract, FX pair, stock option, and listing entities with derived calculations
-- `service` CSV import, startup seeding, holiday abstraction, market-status logic, and stock market-data refresh orchestration
+- `service` CSV/API import, startup seeding, holiday abstraction, market-status logic, and stock market-data refresh orchestration
 - `dto` request/response models for internal and external-provider normalization
 
 ## API Endpoints

@@ -25,10 +25,10 @@ class ForexPairRepositoryTest {
 
     @Test
     void shouldPersistForexPairAndLoadItByTicker() {
-        ForexPair forexPair = createPair("EURUSD", "EUR", "USD", new BigDecimal("1.08350000"), Liquidity.HIGH);
+        ForexPair forexPair = createPair("EUR/USD", "EUR", "USD", new BigDecimal("1.08350000"), Liquidity.HIGH);
         forexPairRepository.saveAndFlush(forexPair);
 
-        ForexPair persisted = forexPairRepository.findByTicker("EURUSD").orElseThrow();
+        ForexPair persisted = forexPairRepository.findByTicker("EUR/USD").orElseThrow();
 
         assertTrue(persisted.getId() != null);
         assertEquals("EUR", persisted.getBaseCurrency());
@@ -41,13 +41,13 @@ class ForexPairRepositoryTest {
     @Test
     void shouldEnforceUniqueTickerConstraint() {
         forexPairRepository.saveAndFlush(
-                createPair("EURUSD", "EUR", "USD", new BigDecimal("1.08350000"), Liquidity.HIGH)
+                createPair("EUR/USD", "EUR", "USD", new BigDecimal("1.08350000"), Liquidity.HIGH)
         );
 
         assertThrows(
                 DataIntegrityViolationException.class,
                 () -> forexPairRepository.saveAndFlush(
-                        createPair("EURUSD", "EUR", "USD", new BigDecimal("1.09000000"), Liquidity.MEDIUM)
+                        createPair("EUR/USD", "EUR", "USD", new BigDecimal("1.09000000"), Liquidity.MEDIUM)
                 )
         );
     }

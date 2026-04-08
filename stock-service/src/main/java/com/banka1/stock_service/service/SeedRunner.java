@@ -13,7 +13,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 
 /**
- * Startup runner that seeds reference data from the configured CSV files.
+ * Startup runner that seeds reference data from configured sources.
  *
  * <p>The current startup flow can import stock exchanges, futures contracts,
  * and FX pairs independently, based on their dedicated feature flags.
@@ -25,7 +25,7 @@ public class SeedRunner implements ApplicationRunner {
 
     private final StockExchangeCsvImportService stockExchangeCsvImportService;
     private final FuturesContractCsvImportService futuresContractCsvImportService;
-    private final ForexPairCsvImportService forexPairCsvImportService;
+    private final ForexPairApiImportService forexPairApiImportService;
     private final StockExchangeSeedProperties stockExchangeSeedProperties;
     private final FuturesContractSeedProperties futuresContractSeedProperties;
     private final ForexPairSeedProperties forexPairSeedProperties;
@@ -67,7 +67,7 @@ public class SeedRunner implements ApplicationRunner {
         }
 
         if (forexPairSeedProperties.enabled()) {
-            ForexPairImportResponse importResponse = forexPairCsvImportService.importFromConfiguredCsv();
+            ForexPairImportResponse importResponse = forexPairApiImportService.importSupportedPairs();
             log.info(
                     "FX pairs imported from {}. processedRows={}, createdCount={}, updatedCount={}, unchangedCount={}",
                     importResponse.source(),
@@ -77,7 +77,7 @@ public class SeedRunner implements ApplicationRunner {
                     importResponse.unchangedCount()
             );
         } else {
-            log.info("FX pair CSV seeding is disabled.");
+            log.info("FX pair API seeding is disabled.");
         }
     }
 }

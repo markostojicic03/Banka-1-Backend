@@ -24,7 +24,7 @@ import java.util.Objects;
  * <p>The pair uses:
  *
  * <ul>
- *     <li>{@code ticker} as the stable business identifier, for example {@code EURUSD}</li>
+ *     <li>{@code ticker} as the stable business identifier, for example {@code EUR/USD}</li>
  *     <li>{@code baseCurrency} and {@code quoteCurrency} to describe the quoted pair</li>
  *     <li>{@code liquidity} to capture a coarse market-depth classification</li>
  * </ul>
