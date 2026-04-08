@@ -14,6 +14,7 @@ The service currently provides:
 - persisted current and daily listing market data with exchange-linked snapshots
 - stock exchange work-time/status endpoints
 - Alpha Vantage-backed stock market-data refresh flow for local stocks and listings
+- scheduled listing market-data refresh for open exchanges
 - JWT authentication through `security-lib`
 - observability integration through `company-observability-starter`
 - a REST adapter to `exchange-service`
@@ -51,6 +52,7 @@ The service uses:
 - stock exchange listing and market-status API
 - stock exchange active-toggle endpoint for testing
 - administrative stock market-data refresh endpoint
+- manual listing refresh endpoint and scheduled listing snapshot refresh
 - timezone/session-based market-phase calculation
 - `HolidayService` extension point with a temporary no-op implementation
 - public `GET /info` endpoint
@@ -78,6 +80,7 @@ That means:
 - stock option metadata can now be persisted as a dedicated `stock_option` entity linked to `stock`
 - current and daily historical market snapshots can now be persisted as `listing` and `listing_daily_price_info`
 - local stock and listing snapshots can now be refreshed from Alpha Vantage quote, daily, and overview endpoints
+- current stock and FX listing snapshots can now be refreshed on a schedule while their exchange is open
 - stock exchange work-time checks are implemented
 - holiday support is intentionally left behind an interface and currently uses a no-op stub
 
@@ -105,6 +108,7 @@ Inside the service itself, the routes are:
 - `PUT /api/stock-exchanges/{id}/toggle-active`
 - `POST /admin/stock-exchanges/import`
 - `POST /admin/stocks/{ticker}/refresh-market-data`
+- `POST /api/listings/{id}/refresh`
 - `GET /actuator/health`
 - `GET /actuator/health/liveness`
 - `GET /actuator/health/readiness`
@@ -118,6 +122,7 @@ Through the API gateway, the same routes are available under the prefix:
 - `PUT /stock/api/stock-exchanges/{id}/toggle-active`
 - `POST /stock/admin/stock-exchanges/import`
 - `POST /stock/admin/stocks/{ticker}/refresh-market-data`
+- `POST /stock/api/listings/{id}/refresh`
 
 Note:
 
@@ -215,6 +220,29 @@ Example response:
   "stockId": 1,
   "listingId": 10,
   "refreshedDailyEntries": 30,
+  "lastRefresh": "2026-04-08T10:15:30"
+}
+```
+
+### `POST /api/listings/{id}/refresh`
+
+JWT-protected endpoint that manually refreshes one persisted listing snapshot by id.
+
+The current implementation supports:
+
+- `STOCK` listings through Alpha Vantage `GLOBAL_QUOTE`
+- `FOREX` listings through Alpha Vantage `CURRENCY_EXCHANGE_RATE`
+
+The endpoint also upserts one `listing_daily_price_info` row for the trading date returned by the provider.
+
+Example response:
+
+```json
+{
+  "listingId": 15,
+  "ticker": "AAPL",
+  "listingType": "STOCK",
+  "dailySnapshotDate": "2026-04-08",
   "lastRefresh": "2026-04-08T10:15:30"
 }
 ```
@@ -476,6 +504,8 @@ STOCK_TICKER_SEED_ENABLED=true
 STOCK_EXCHANGE_SEED_CSV_LOCATION=classpath:seed/exchanges.csv
 STOCK_FUTURES_SEED_CSV_LOCATION=classpath:seed/future_data.csv
 STOCK_FOREX_SEED_CSV_LOCATION=classpath:seed/forex_pairs_seed.csv
+STOCK_LISTING_REFRESH_ENABLED=true
+STOCK_LISTING_REFRESH_INTERVAL_MS=900000
 STOCK_MARKET_DATA_BASE_URL=https://www.alphavantage.co
 STOCK_MARKET_DATA_API_KEY=replace_with_provider_api_key
 STOCK_MARKET_DATA_DAILY_HISTORY_LIMIT=30
@@ -499,6 +529,8 @@ Most important properties:
 | `stock.futures-seed.csv-location` | Spring resource location of the futures contract CSV seed file |
 | `stock.forex-seed.enabled` | enables or disables automatic CSV seeding of FX pairs on startup |
 | `stock.forex-seed.csv-location` | Spring resource location of the FX pair CSV seed file |
+| `stock.listing-refresh.enabled` | enables or disables the scheduled listing refresh job |
+| `stock.listing-refresh.interval-ms` | fixed delay between scheduled listing refresh passes in milliseconds |
 | `stock.market-data.base-url` | base URL for the external stock market data provider |
 | `stock.market-data.api-key` | API key for the external market data provider |
 | `stock.market-data.daily-history-limit` | maximum number of recent daily snapshots persisted during one refresh |
@@ -515,10 +547,11 @@ When the service starts, it:
 6. seeds the built-in starter stock tickers if seeding is enabled
 7. imports futures dummy data from the configured CSV file if seeding is enabled, including linked listings and daily snapshots
 8. imports FX pair reference data from the API if seeding is enabled
-9. registers the JWT decoder and security filter chain from `security-lib`
-10. registers the `RestClient` bean for `exchange-service`
-11. exposes the stock exchange REST endpoints
-12. exposes the actuator health endpoints
+9. enables the scheduled listing refresh job if it is configured as enabled
+10. registers the JWT decoder and security filter chain from `security-lib`
+11. registers the `RestClient` bean for `exchange-service`
+12. exposes the stock exchange REST endpoints
+13. exposes the actuator health endpoints
 
 ## CSV Seed Format
 
