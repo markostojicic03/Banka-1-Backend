@@ -36,7 +36,6 @@ public class CreateBuyOrderRequest {
     private Boolean margin = false;
 
     /** ID of the account to debit funds from. */
-    @NotNull
     @Positive
     private Long accountId;
 }

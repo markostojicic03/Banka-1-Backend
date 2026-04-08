@@ -5,9 +5,11 @@ import com.banka1.order.client.EmployeeClient;
 import com.banka1.order.client.ExchangeClient;
 import com.banka1.order.client.StockClient;
 import com.banka1.order.dto.AccountTransactionRequest;
+import com.banka1.order.dto.AccountDetailsDto;
 import com.banka1.order.dto.BankAccountDto;
 import com.banka1.order.dto.ExchangeRateDto;
 import com.banka1.order.dto.StockListingDto;
+import com.banka1.order.dto.client.PaymentDto;
 import com.banka1.order.entity.ActuaryInfo;
 import com.banka1.order.entity.Order;
 import com.banka1.order.entity.Portfolio;
@@ -122,7 +124,7 @@ public class OrderExecutionServiceImpl implements OrderExecutionService {
         createTransaction(managedOrder, quantityToExecute, executionPricePerUnit, grossChunkAmount, commission);
         updatePortfolio(managedOrder, listing, quantityToExecute, executionPricePerUnit);
         transferFunds(managedOrder, listing.getCurrency(), grossChunkAmount);
-        updateActuaryLimit(managedOrder, listing.getCurrency(), grossChunkAmount);
+        finalizeActuaryExposure(managedOrder, listing.getCurrency(), grossChunkAmount);
 
         managedOrder.setRemainingPortions(managedOrder.getRemainingPortions() - quantityToExecute);
         if (managedOrder.getRemainingPortions() == 0) {
@@ -135,7 +137,7 @@ public class OrderExecutionServiceImpl implements OrderExecutionService {
     private boolean activateIfEligible(Order order, StockListingDto listing) {
         if (order.getOrderType() == OrderType.STOP) {
             boolean activated = order.getDirection() == OrderDirection.BUY
-                    ? listing.getAsk().compareTo(order.getStopValue()) >= 0
+                    ? listing.getAsk().compareTo(order.getStopValue()) > 0
                     : listing.getBid().compareTo(order.getStopValue()) < 0;
             if (activated) {
                 order.setOrderType(OrderType.MARKET);
@@ -203,7 +205,7 @@ public class OrderExecutionServiceImpl implements OrderExecutionService {
     }
 
     private void updatePortfolio(Order order, StockListingDto listing, int quantity, BigDecimal executionPricePerUnit) {
-        Portfolio portfolio = portfolioRepository.findByUserIdAndListingId(order.getUserId(), order.getListingId()).orElse(null);
+        Portfolio portfolio = portfolioRepository.findByUserIdAndListingIdForUpdate(order.getUserId(), order.getListingId()).orElse(null);
 
         if (order.getDirection() == OrderDirection.BUY) {
             if (portfolio == null) {
@@ -212,6 +214,7 @@ public class OrderExecutionServiceImpl implements OrderExecutionService {
                 portfolio.setListingId(order.getListingId());
                 portfolio.setListingType(listing.getListingType() == null ? ListingType.STOCK : listing.getListingType());
                 portfolio.setQuantity(quantity);
+                portfolio.setReservedQuantity(0);
                 portfolio.setAveragePurchasePrice(executionPricePerUnit);
             } else {
                 BigDecimal totalValue = portfolio.getAveragePurchasePrice()
@@ -229,8 +232,9 @@ public class OrderExecutionServiceImpl implements OrderExecutionService {
             throw new IllegalStateException("Cannot execute sell order without owned quantity");
         }
 
+        portfolio.setReservedQuantity(Math.max(0, defaultInteger(portfolio.getReservedQuantity()) - quantity));
         portfolio.setQuantity(portfolio.getQuantity() - quantity);
-        if (portfolio.getQuantity() == 0) {
+        if (portfolio.getQuantity() == 0 && defaultInteger(portfolio.getReservedQuantity()) == 0) {
             portfolioRepository.delete(portfolio);
         } else {
             portfolioRepository.save(portfolio);
@@ -239,50 +243,32 @@ public class OrderExecutionServiceImpl implements OrderExecutionService {
 
     private void transferFunds(Order order, String currency, BigDecimal amount) {
         BankAccountDto bankAccount = employeeClient.getBankAccount(currency);
-        AccountTransactionRequest request = new AccountTransactionRequest();
-        request.setAmount(amount);
-        request.setCurrency(currency);
-        request.setDescription("Order execution");
         boolean actuaryOrder = actuaryInfoRepository.findByEmployeeId(order.getUserId()).isPresent();
 
         if (order.getDirection() == OrderDirection.BUY) {
-            request.setFromAccountId(resolveDebitAccount(order, bankAccount, actuaryOrder));
-            request.setToAccountId(resolveCreditAccount(order, bankAccount, actuaryOrder));
-        } else {
-            request.setFromAccountId(bankAccount.getAccountId());
-            request.setToAccountId(order.getAccountId());
+            if (actuaryOrder) {
+                return;
+            }
+            transferForClient(order.getAccountId(), bankAccount.getAccountId(), amount, currency, "Order execution");
+            return;
         }
 
-        if (request.getFromAccountId() != null && request.getFromAccountId().equals(request.getToAccountId())) {
-            throw new IllegalStateException("Transfer source and destination must differ");
-        }
-
-        accountClient.transfer(request);
+        transferWithoutConversionFee(bankAccount.getAccountId(), order.getAccountId(), amount, currency, "Order execution");
     }
 
-    private Long resolveDebitAccount(Order order, BankAccountDto bankAccount, boolean actuaryOrder) {
-        if (actuaryOrder) {
-            return bankAccount.getAccountId();
-        }
-        return order.getAccountId();
-    }
-
-    private Long resolveCreditAccount(Order order, BankAccountDto bankAccount, boolean actuaryOrder) {
-        if (actuaryOrder) {
-            return order.getAccountId();
-        }
-        return bankAccount.getAccountId();
-    }
-
-    private void updateActuaryLimit(Order order, String currency, BigDecimal amount) {
-        ActuaryInfo actuaryInfo = actuaryInfoRepository.findByEmployeeId(order.getUserId()).orElse(null);
+    private void finalizeActuaryExposure(Order order, String currency, BigDecimal amount) {
+        ActuaryInfo actuaryInfo = actuaryInfoRepository.findByEmployeeIdForUpdate(order.getUserId()).orElse(null);
         if (actuaryInfo == null) {
             return;
         }
-        BigDecimal converted = convertAmount(currency, LIMIT_CURRENCY, amount);
+        BigDecimal converted = convertAmountWithoutCommission(currency, LIMIT_CURRENCY, amount);
+        BigDecimal reservedLimit = actuaryInfo.getReservedLimit() == null ? BigDecimal.ZERO : actuaryInfo.getReservedLimit();
+        actuaryInfo.setReservedLimit(reservedLimit.subtract(converted).max(BigDecimal.ZERO));
         BigDecimal usedLimit = actuaryInfo.getUsedLimit() == null ? BigDecimal.ZERO : actuaryInfo.getUsedLimit();
         actuaryInfo.setUsedLimit(usedLimit.add(converted));
         actuaryInfoRepository.save(actuaryInfo);
+        BigDecimal orderReserved = order.getReservedLimitExposure() == null ? BigDecimal.ZERO : order.getReservedLimitExposure();
+        order.setReservedLimitExposure(orderReserved.subtract(converted).max(BigDecimal.ZERO));
     }
 
     private long calculateExecutionDelay(Order order) {
@@ -330,5 +316,54 @@ public class OrderExecutionServiceImpl implements OrderExecutionService {
         }
         ExchangeRateDto conversion = exchangeClient.calculate(fromCurrency, toCurrency, amount);
         return conversion.getConvertedAmount() == null ? amount : conversion.getConvertedAmount();
+    }
+
+    private BigDecimal convertAmountWithoutCommission(String fromCurrency, String toCurrency, BigDecimal amount) {
+        if (amount == null || fromCurrency == null || toCurrency == null || fromCurrency.equalsIgnoreCase(toCurrency)) {
+            return amount;
+        }
+        ExchangeRateDto conversion = exchangeClient.calculateWithoutCommission(fromCurrency, toCurrency, amount);
+        return conversion.getConvertedAmount() == null ? amount : conversion.getConvertedAmount();
+    }
+
+    private void transferWithoutConversionFee(Long fromAccountId, Long toAccountId, BigDecimal amount, String currency, String description) {
+        if (fromAccountId != null && fromAccountId.equals(toAccountId)) {
+            throw new IllegalStateException("Transfer source and destination must differ");
+        }
+        AccountTransactionRequest request = new AccountTransactionRequest();
+        request.setFromAccountId(fromAccountId);
+        request.setToAccountId(toAccountId);
+        request.setAmount(amount);
+        request.setCurrency(currency);
+        request.setDescription(description);
+        accountClient.transfer(request);
+    }
+
+    private void transferForClient(Long fromAccountId, Long toAccountId, BigDecimal amount, String currency, String description) {
+        AccountDetailsDto fromAccount = accountClient.getAccountDetails(fromAccountId);
+        AccountDetailsDto toAccount = accountClient.getAccountDetails(toAccountId);
+        if (fromAccount.getCurrency() == null || fromAccount.getCurrency().equalsIgnoreCase(currency)) {
+            transferWithoutConversionFee(fromAccountId, toAccountId, amount, currency, description);
+            return;
+        }
+
+        ExchangeRateDto conversion = exchangeClient.calculate(fromAccount.getCurrency(), currency, amount);
+        PaymentDto payment = new PaymentDto(
+                fromAccount.getAccountNumber(),
+                toAccount.getAccountNumber(),
+                amount,
+                conversion.getConvertedAmount() == null ? amount : conversion.getConvertedAmount(),
+                conversion.getCommission() == null ? BigDecimal.ZERO : conversion.getCommission(),
+                orderOwnerId(fromAccount)
+        );
+        accountClient.transaction(payment);
+    }
+
+    private Long orderOwnerId(AccountDetailsDto account) {
+        return account.getOwnerId() == null ? 0L : account.getOwnerId();
+    }
+
+    private int defaultInteger(Integer value) {
+        return value == null ? 0 : value;
     }
 }

@@ -64,6 +64,7 @@ class PortfolioServiceTest {
 
     private AuthenticatedUser clientUser;
     private AuthenticatedUser actuaryUser;
+    private AuthenticatedUser supervisorUser;
     private Portfolio stockPortfolio;
     private Portfolio optionPortfolio;
 
@@ -71,6 +72,7 @@ class PortfolioServiceTest {
     void setUp() {
         clientUser = new AuthenticatedUser(1L, Set.of("CLIENT"), Set.of());
         actuaryUser = new AuthenticatedUser(1L, Set.of("AGENT"), Set.of());
+        supervisorUser = new AuthenticatedUser(1L, Set.of("SUPERVISOR"), Set.of());
 
         stockPortfolio = new Portfolio();
         stockPortfolio.setId(1L);
@@ -237,6 +239,41 @@ class PortfolioServiceTest {
         assertThatThrownBy(() -> portfolioService.exerciseOption(legacyActuaryAlias, 2L))
                 .isInstanceOf(ForbiddenOperationException.class)
                 .hasMessageContaining("actuaries");
+    }
+
+    @Test
+    void supervisorCanExerciseOptionWhenOtherwiseEligible() {
+        when(portfolioRepository.findById(2L)).thenReturn(Optional.of(optionPortfolio));
+        StockListingDto optionListing = optionListing(LocalDate.now().plusDays(1), OptionType.CALL, new BigDecimal("150"), 300L);
+        StockListingDto underlying = new StockListingDto();
+        underlying.setId(300L);
+        underlying.setListingType(ListingType.STOCK);
+        when(stockClient.getListing(200L)).thenReturn(optionListing);
+        when(stockClient.getListing(300L)).thenReturn(underlying);
+        when(portfolioRepository.findByUserIdAndListingId(1L, 300L)).thenReturn(Optional.empty());
+
+        BankAccountDto bankAccount = new BankAccountDto();
+        bankAccount.setAccountId(999L);
+        when(employeeClient.getBankAccount("USD")).thenReturn(bankAccount);
+
+        AccountDetailsDto bankDetails = new AccountDetailsDto();
+        bankDetails.setAccountNumber("ACC-USER");
+        bankDetails.setCurrency("USD");
+        when(accountClient.getAccountDetails(999L)).thenReturn(bankDetails);
+
+        AccountDetailsDto government = new AccountDetailsDto();
+        government.setAccountNumber("ACC-MARKET");
+        government.setCurrency("RSD");
+        when(accountClient.getGovernmentBankAccountRsd()).thenReturn(government);
+
+        ExchangeRateDto conversion = new ExchangeRateDto();
+        conversion.setConvertedAmount(new BigDecimal("23400.00"));
+        when(exchangeClient.calculate("USD", "RSD", new BigDecimal("200.00"))).thenReturn(conversion);
+
+        portfolioService.exerciseOption(supervisorUser, 2L);
+
+        verify(accountClient).transaction(org.mockito.ArgumentMatchers.any(PaymentDto.class));
+        verify(portfolioRepository).delete(optionPortfolio);
     }
 
     @Test

@@ -39,6 +39,10 @@ public class ActuaryInfo {
     @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal usedLimit = BigDecimal.ZERO;
 
+    /** Exposure reserved by pending/approved orders that has not yet been fully executed, in RSD. */
+    @Column(nullable = false, precision = 19, scale = 4)
+    private BigDecimal reservedLimit = BigDecimal.ZERO;
+
     /**
      * If true, a supervisor must approve every order placed by this agent.
      * Always false for supervisors.

@@ -144,7 +144,7 @@ public class PortfolioServiceImpl implements PortfolioService {
     @Override
     @Transactional
     public void exerciseOption(AuthenticatedUser user, Long portfolioId) {
-        if (!user.hasRole("AGENT")) {
+        if (!user.isAgent()) {
             throw new ForbiddenOperationException("Only actuaries can exercise options");
         }
 

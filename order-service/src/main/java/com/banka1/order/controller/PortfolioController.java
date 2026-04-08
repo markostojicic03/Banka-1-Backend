@@ -39,7 +39,7 @@ PortfolioController {
      * @return list of portfolio positions with detailed information
      */
     @GetMapping
-    @PreAuthorize("hasAnyRole('CLIENT','AGENT')")
+    @PreAuthorize("hasAnyRole('CLIENT_BASIC','CLIENT_TRADING','AGENT','SUPERVISOR')")
     public ResponseEntity<PortfolioSummaryResponse> getPortfolio(
             @AuthenticationPrincipal Jwt jwt
     ) {
@@ -55,7 +55,7 @@ PortfolioController {
      * @return 200 OK on success
      */
     @PutMapping("/{id}/set-public")
-    @PreAuthorize("hasAnyRole('CLIENT','AGENT')")
+    @PreAuthorize("hasAnyRole('CLIENT_BASIC','CLIENT_TRADING','AGENT','SUPERVISOR')")
     public ResponseEntity<Void> setPublicQuantity(
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable Long id,
@@ -79,7 +79,7 @@ PortfolioController {
      * @return 200 OK on successful execution
      */
     @PostMapping("/{id}/exercise-option")
-    @PreAuthorize("hasRole('AGENT')")
+    @PreAuthorize("hasAnyRole('AGENT','SUPERVISOR')")
     public ResponseEntity<Void> exerciseOption(
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable Long id

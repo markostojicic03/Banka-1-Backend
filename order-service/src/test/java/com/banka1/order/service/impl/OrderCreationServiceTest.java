@@ -17,6 +17,7 @@ import com.banka1.order.dto.OrderNotificationPayload;
 import com.banka1.order.dto.OrderOverviewResponse;
 import com.banka1.order.dto.OrderResponse;
 import com.banka1.order.dto.StockListingDto;
+import com.banka1.order.dto.client.PaymentDto;
 import com.banka1.order.entity.ActuaryInfo;
 import com.banka1.order.entity.Order;
 import com.banka1.order.entity.Portfolio;
@@ -25,6 +26,8 @@ import com.banka1.order.entity.enums.OrderDirection;
 import com.banka1.order.entity.enums.OrderOverviewStatusFilter;
 import com.banka1.order.entity.enums.OrderStatus;
 import com.banka1.order.entity.enums.OrderType;
+import com.banka1.order.exception.BadRequestException;
+import com.banka1.order.exception.ForbiddenOperationException;
 import com.banka1.order.exception.BusinessConflictException;
 import com.banka1.order.exception.ResourceNotFoundException;
 import com.banka1.order.rabbitmq.OrderNotificationProducer;
@@ -50,6 +53,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -85,6 +89,7 @@ class OrderCreationServiceTest {
     private AuthenticatedUser clientUser;
     private AuthenticatedUser marginClient;
     private AuthenticatedUser actuaryUser;
+    private AuthenticatedUser supervisorUser;
     private CreateBuyOrderRequest buyRequest;
     private CreateSellOrderRequest sellRequest;
     private StockListingDto listing;
@@ -96,9 +101,10 @@ class OrderCreationServiceTest {
 
     @BeforeEach
     void setUp() {
-        clientUser = new AuthenticatedUser(1L, Set.of("CLIENT"), Set.of());
-        marginClient = new AuthenticatedUser(1L, Set.of("CLIENT"), Set.of("MARGIN_TRADING"));
+        clientUser = new AuthenticatedUser(1L, Set.of("CLIENT_TRADING"), Set.of("TRADING"));
+        marginClient = new AuthenticatedUser(1L, Set.of("CLIENT_TRADING"), Set.of("TRADING", "MARGIN_TRADING"));
         actuaryUser = new AuthenticatedUser(2L, Set.of("AGENT"), Set.of("MARGIN_TRADING"));
+        supervisorUser = new AuthenticatedUser(3L, Set.of("SUPERVISOR"), Set.of("MARGIN_TRADING"));
 
         buyRequest = new CreateBuyOrderRequest();
         buyRequest.setListingId(42L);
@@ -144,6 +150,11 @@ class OrderCreationServiceTest {
         employee.setIme("Bank");
         employee.setPrezime("Account");
         employee.setEmail("bank@example.com");
+        EmployeeDto supervisor = new EmployeeDto();
+        supervisor.setId(3L);
+        supervisor.setIme("Mika");
+        supervisor.setPrezime("Supervisor");
+        supervisor.setEmail("mika.supervisor@example.com");
         storedOrder = new AtomicReference<>();
 
         ExchangeRateDto usdToRsd = new ExchangeRateDto();
@@ -153,18 +164,36 @@ class OrderCreationServiceTest {
         ExchangeRateDto limitCap = new ExchangeRateDto();
         limitCap.setConvertedAmount(new BigDecimal("12.00"));
 
+        lenient().when(exchangeClient.calculate(anyString(), anyString(), any(BigDecimal.class))).thenAnswer(invocation -> {
+            ExchangeRateDto dto = new ExchangeRateDto();
+            dto.setConvertedAmount(invocation.getArgument(2));
+            return dto;
+        });
+        lenient().when(exchangeClient.calculateWithoutCommission(anyString(), anyString(), any(BigDecimal.class))).thenAnswer(invocation -> {
+            ExchangeRateDto dto = new ExchangeRateDto();
+            dto.setConvertedAmount(invocation.getArgument(2));
+            return dto;
+        });
         lenient().when(stockClient.getListing(42L)).thenReturn(listing);
         lenient().when(stockClient.getExchangeStatus(7L)).thenReturn(exchangeStatus);
         lenient().when(accountClient.getAccountDetails(5L)).thenReturn(accountDetails);
         lenient().when(accountClient.getAccountDetails(999L)).thenReturn(accountDetails);
         lenient().doNothing().when(accountClient).transfer(any(AccountTransactionRequest.class));
+        lenient().when(accountClient.transaction(any(PaymentDto.class))).thenReturn(null);
         lenient().when(employeeClient.getBankAccount("USD")).thenReturn(bankAccount);
         lenient().when(employeeClient.getEmployee(2L)).thenReturn(employee);
+        lenient().when(employeeClient.getEmployee(3L)).thenReturn(supervisor);
         lenient().when(actuaryInfoRepository.findByEmployeeId(1L)).thenReturn(Optional.empty());
         lenient().when(actuaryInfoRepository.findByEmployeeId(2L)).thenReturn(Optional.empty());
+        lenient().when(actuaryInfoRepository.findByEmployeeId(3L)).thenReturn(Optional.empty());
+        lenient().when(actuaryInfoRepository.findByEmployeeIdForUpdate(1L)).thenReturn(Optional.empty());
+        lenient().when(actuaryInfoRepository.findByEmployeeIdForUpdate(2L)).thenReturn(Optional.empty());
+        lenient().when(actuaryInfoRepository.findByEmployeeIdForUpdate(3L)).thenReturn(Optional.empty());
         lenient().when(exchangeClient.calculate("USD", "RSD", new BigDecimal("1010.00"))).thenReturn(usdToRsd);
+        lenient().when(exchangeClient.calculateWithoutCommission("USD", "RSD", new BigDecimal("1010.00"))).thenReturn(usdToRsd);
         lenient().when(exchangeClient.calculate("USD", "USD", new BigDecimal("7"))).thenReturn(usdCap);
         lenient().when(exchangeClient.calculate("USD", "USD", new BigDecimal("12"))).thenReturn(limitCap);
+        lenient().when(exchangeClient.calculateWithoutCommission("USD", "USD", new BigDecimal("1010.00"))).thenReturn(usdCap);
         lenient().when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
             Order order = invocation.getArgument(0);
             if (order.getId() == null) {
@@ -175,6 +204,7 @@ class OrderCreationServiceTest {
         });
         lenient().when(orderRepository.findById(100L)).thenAnswer(invocation -> Optional.ofNullable(storedOrder.get()));
         lenient().when(orderRepository.findByIdForUpdate(100L)).thenAnswer(invocation -> Optional.ofNullable(storedOrder.get()));
+        lenient().when(portfolioRepository.findByUserIdAndListingIdForUpdate(1L, 42L)).thenReturn(Optional.empty());
     }
 
     @Test
@@ -211,14 +241,14 @@ class OrderCreationServiceTest {
         agent.setLimit(new BigDecimal("2000.00"));
         agent.setUsedLimit(BigDecimal.ZERO);
         when(actuaryInfoRepository.findByEmployeeId(2L)).thenReturn(Optional.of(agent));
+        when(actuaryInfoRepository.findByEmployeeIdForUpdate(2L)).thenReturn(Optional.of(agent));
 
         service.createBuyOrder(actuaryUser, buyRequest);
         OrderResponse response = service.confirmOrder(actuaryUser, 100L);
 
         assertThat(response.getStatus()).isEqualTo(OrderStatus.PENDING);
         assertThat(response.getApprovedBy()).isNull();
-        verify(accountClient).getAccountDetails(5L);
-        verify(employeeClient, never()).getBankAccount("USD");
+        verify(accountClient).getAccountDetails(999L);
         verify(accountClient, never()).transfer(any(AccountTransactionRequest.class));
         verify(orderExecutionService, never()).executeOrderAsync(any());
     }
@@ -232,8 +262,7 @@ class OrderCreationServiceTest {
         assertThatThrownBy(() -> service.confirmOrder(actuaryUser, 100L))
                 .isInstanceOf(BusinessConflictException.class)
                 .hasMessageContaining("Insufficient funds");
-        verify(accountClient).getAccountDetails(5L);
-        verify(employeeClient, never()).getBankAccount("USD");
+        verify(accountClient).getAccountDetails(999L);
         verify(accountClient, never()).transfer(any(AccountTransactionRequest.class));
         verify(orderExecutionService, never()).executeOrderAsync(any());
     }
@@ -246,6 +275,7 @@ class OrderCreationServiceTest {
         agent.setLimit(new BigDecimal("2000.00"));
         agent.setUsedLimit(BigDecimal.ZERO);
         when(actuaryInfoRepository.findByEmployeeId(2L)).thenReturn(Optional.of(agent));
+        when(actuaryInfoRepository.findByEmployeeIdForUpdate(2L)).thenReturn(Optional.of(agent));
 
         service.createBuyOrder(actuaryUser, buyRequest);
         service.confirmOrder(actuaryUser, 100L);
@@ -254,7 +284,7 @@ class OrderCreationServiceTest {
 
         assertThat(response.getStatus()).isEqualTo(OrderStatus.APPROVED);
         assertThat(response.getApprovedBy()).isEqualTo(88L);
-        verify(accountClient).transfer(any(AccountTransactionRequest.class));
+        verify(accountClient, never()).transfer(any(AccountTransactionRequest.class));
         verify(orderExecutionService).executeOrderAsync(100L);
     }
 
@@ -266,6 +296,7 @@ class OrderCreationServiceTest {
         agent.setLimit(new BigDecimal("2000.00"));
         agent.setUsedLimit(BigDecimal.ZERO);
         when(actuaryInfoRepository.findByEmployeeId(2L)).thenReturn(Optional.of(agent));
+        when(actuaryInfoRepository.findByEmployeeIdForUpdate(2L)).thenReturn(Optional.of(agent));
 
         service.createBuyOrder(actuaryUser, buyRequest);
         service.confirmOrder(actuaryUser, 100L);
@@ -286,6 +317,7 @@ class OrderCreationServiceTest {
         agent.setLimit(new BigDecimal("2000.00"));
         agent.setUsedLimit(BigDecimal.ZERO);
         when(actuaryInfoRepository.findByEmployeeId(2L)).thenReturn(Optional.of(agent));
+        when(actuaryInfoRepository.findByEmployeeIdForUpdate(2L)).thenReturn(Optional.of(agent));
 
         service.createBuyOrder(actuaryUser, buyRequest);
         service.confirmOrder(actuaryUser, 100L);
@@ -294,6 +326,8 @@ class OrderCreationServiceTest {
 
         assertThat(response.getStatus()).isEqualTo(OrderStatus.DECLINED);
         assertThat(response.getApprovedBy()).isEqualTo(77L);
+        assertThat(response.getIsDone()).isTrue();
+        assertThat(response.getRemainingPortions()).isZero();
         verify(accountClient, never()).transfer(any(AccountTransactionRequest.class));
     }
 
@@ -305,12 +339,13 @@ class OrderCreationServiceTest {
         agent.setLimit(new BigDecimal("2000.00"));
         agent.setUsedLimit(BigDecimal.ZERO);
         when(actuaryInfoRepository.findByEmployeeId(2L)).thenReturn(Optional.of(agent));
+        when(actuaryInfoRepository.findByEmployeeIdForUpdate(2L)).thenReturn(Optional.of(agent));
 
         service.createBuyOrder(actuaryUser, buyRequest);
         service.confirmOrder(actuaryUser, 100L);
         service.approveOrder(88L, 100L);
 
-        verify(accountClient, times(1)).transfer(any(AccountTransactionRequest.class));
+        verify(accountClient, never()).transfer(any(AccountTransactionRequest.class));
     }
 
     @Test
@@ -321,12 +356,14 @@ class OrderCreationServiceTest {
         agent.setLimit(new BigDecimal("2000.00"));
         agent.setUsedLimit(BigDecimal.ZERO);
         when(actuaryInfoRepository.findByEmployeeId(2L)).thenReturn(Optional.of(agent));
+        when(actuaryInfoRepository.findByEmployeeIdForUpdate(2L)).thenReturn(Optional.of(agent));
         EmployeeDto employee = new EmployeeDto();
         employee.setId(2L);
         employee.setIme("Ana");
         employee.setPrezime("Agent");
         employee.setEmail("ana.agent@example.com");
         when(employeeClient.getEmployee(2L)).thenReturn(employee);
+        when(actuaryInfoRepository.findByEmployeeIdForUpdate(2L)).thenReturn(Optional.of(agent));
 
         service.createBuyOrder(actuaryUser, buyRequest);
         service.confirmOrder(actuaryUser, 100L);
@@ -347,6 +384,7 @@ class OrderCreationServiceTest {
         agent.setLimit(new BigDecimal("2000.00"));
         agent.setUsedLimit(BigDecimal.ZERO);
         when(actuaryInfoRepository.findByEmployeeId(2L)).thenReturn(Optional.of(agent));
+        when(actuaryInfoRepository.findByEmployeeIdForUpdate(2L)).thenReturn(Optional.of(agent));
         EmployeeDto employee = new EmployeeDto();
         employee.setId(2L);
         employee.setIme("Ana");
@@ -374,6 +412,8 @@ class OrderCreationServiceTest {
 
         assertThat(response.getStatus()).isEqualTo(OrderStatus.DECLINED);
         assertThat(response.getApprovedBy()).isEqualTo(OrderCreationServiceImpl.SYSTEM_APPROVAL);
+        assertThat(response.getIsDone()).isTrue();
+        assertThat(response.getRemainingPortions()).isZero();
         verify(orderExecutionService, never()).executeOrderAsync(any());
     }
 
@@ -403,12 +443,14 @@ class OrderCreationServiceTest {
     void createBuyOrder_marksAfterHoursWhenExchangeClosed() {
         exchangeStatus.setClosed(true);
         exchangeStatus.setOpen(false);
+        exchangeStatus.setAfterHours(false);
 
-        service.createBuyOrder(clientUser, buyRequest);
+        OrderResponse response = service.createBuyOrder(clientUser, buyRequest);
 
         ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
         verify(orderRepository).save(captor.capture());
-        assertThat(captor.getValue().getAfterHours()).isTrue();
+        assertThat(captor.getValue().getAfterHours()).isFalse();
+        assertThat(response.getExchangeClosed()).isTrue();
     }
 
     @Test
@@ -419,6 +461,7 @@ class OrderCreationServiceTest {
         portfolio.setQuantity(20);
         portfolio.setAveragePurchasePrice(new BigDecimal("90.00"));
         when(portfolioRepository.findByUserIdAndListingId(1L, 42L)).thenReturn(Optional.of(portfolio));
+        when(portfolioRepository.findByUserIdAndListingIdForUpdate(1L, 42L)).thenReturn(Optional.of(portfolio));
 
         OrderResponse created = service.createSellOrder(clientUser, sellRequest);
         OrderResponse confirmed = service.confirmOrder(clientUser, 100L);
@@ -461,6 +504,7 @@ class OrderCreationServiceTest {
         portfolio.setQuantity(20);
         portfolio.setAveragePurchasePrice(new BigDecimal("90.00"));
         when(portfolioRepository.findByUserIdAndListingId(1L, 42L)).thenReturn(Optional.of(portfolio));
+        when(portfolioRepository.findByUserIdAndListingIdForUpdate(1L, 42L)).thenReturn(Optional.of(portfolio));
         sellRequest.setMargin(true);
         accountDetails.setBalance(BigDecimal.ZERO);
         accountDetails.setAvailableCredit(new BigDecimal("10000.00"));
@@ -479,6 +523,7 @@ class OrderCreationServiceTest {
         portfolio.setQuantity(20);
         portfolio.setAveragePurchasePrice(new BigDecimal("90.00"));
         when(portfolioRepository.findByUserIdAndListingId(1L, 42L)).thenReturn(Optional.of(portfolio));
+        when(portfolioRepository.findByUserIdAndListingIdForUpdate(1L, 42L)).thenReturn(Optional.of(portfolio));
         sellRequest.setMargin(true);
         accountDetails.setAvailableCredit(BigDecimal.ZERO);
         accountDetails.setBalance(new BigDecimal("10000.00"));
@@ -644,8 +689,265 @@ class OrderCreationServiceTest {
         OrderResponse response = service.cancelOrder(200L);
 
         assertThat(response.getStatus()).isEqualTo(OrderStatus.CANCELLED);
-        assertThat(response.getRemainingPortions()).isEqualTo(4);
+        assertThat(response.getRemainingPortions()).isZero();
         assertThat(response.getIsDone()).isTrue();
+    }
+
+    @Test
+    void supervisorPartialCancel_releasesReservationsProportionallyAndKeepsOrderActive() {
+        Order order = new Order();
+        order.setId(210L);
+        order.setUserId(2L);
+        order.setListingId(42L);
+        order.setOrderType(OrderType.LIMIT);
+        order.setQuantity(10);
+        order.setContractSize(1);
+        order.setPricePerUnit(new BigDecimal("101.00"));
+        order.setLimitValue(new BigDecimal("105.00"));
+        order.setDirection(OrderDirection.SELL);
+        order.setRemainingPortions(10);
+        order.setStatus(OrderStatus.PENDING);
+        order.setIsDone(false);
+        order.setAccountId(5L);
+        order.setReservedLimitExposure(new BigDecimal("1000.0000"));
+
+        ActuaryInfo agent = new ActuaryInfo();
+        agent.setEmployeeId(2L);
+        agent.setReservedLimit(new BigDecimal("1000.0000"));
+
+        Portfolio portfolio = new Portfolio();
+        portfolio.setUserId(2L);
+        portfolio.setListingId(42L);
+        portfolio.setQuantity(20);
+        portfolio.setReservedQuantity(10);
+        portfolio.setAveragePurchasePrice(new BigDecimal("90.00"));
+
+        when(orderRepository.findByIdForUpdate(210L)).thenReturn(Optional.of(order));
+        when(actuaryInfoRepository.findByEmployeeIdForUpdate(2L)).thenReturn(Optional.of(agent));
+        when(portfolioRepository.findByUserIdAndListingIdForUpdate(2L, 42L)).thenReturn(Optional.of(portfolio));
+        when(stockClient.getListing(42L)).thenReturn(listing);
+
+        OrderResponse response = service.cancelOrder(210L, 4);
+
+        assertThat(response.getStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(response.getIsDone()).isFalse();
+        assertThat(response.getRemainingPortions()).isEqualTo(6);
+        assertThat(portfolio.getReservedQuantity()).isEqualTo(6);
+        assertThat(agent.getReservedLimit()).isEqualByComparingTo("600.0000");
+        assertThat(order.getReservedLimitExposure()).isEqualByComparingTo("600.0000");
+    }
+
+    @Test
+    void clientWithoutTradingPermissionCannotCreateOrder() {
+        AuthenticatedUser basicClient = new AuthenticatedUser(1L, Set.of("CLIENT_BASIC"), Set.of());
+
+        assertThatThrownBy(() -> service.createBuyOrder(basicClient, buyRequest))
+                .isInstanceOf(ForbiddenOperationException.class)
+                .hasMessageContaining("trading permission");
+    }
+
+    @Test
+    void clientCannotCreateUnsupportedListingTypes() {
+        listing.setListingType(ListingType.OPTION);
+
+        assertThatThrownBy(() -> service.createBuyOrder(clientUser, buyRequest))
+                .isInstanceOf(ForbiddenOperationException.class)
+                .hasMessageContaining("stocks and futures");
+    }
+
+    @Test
+    void supervisorCanCreateBuyOrderWithoutSelectedClientAccount() {
+        buyRequest.setAccountId(null);
+
+        OrderResponse response = service.createBuyOrder(supervisorUser, buyRequest);
+
+        assertThat(response.getStatus()).isEqualTo(OrderStatus.PENDING_CONFIRMATION);
+        assertThat(storedOrder.get().getAccountId()).isEqualTo(999L);
+    }
+
+    @Test
+    void clientBuyStillRequiresSelectedAccount() {
+        buyRequest.setAccountId(null);
+
+        assertThatThrownBy(() -> service.createBuyOrder(clientUser, buyRequest))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Account is required for client buy orders");
+    }
+
+    @Test
+    void agentLimitUsesNoCommissionConversionPath() {
+        ActuaryInfo agent = new ActuaryInfo();
+        agent.setEmployeeId(2L);
+        agent.setLimit(new BigDecimal("5000.00"));
+        agent.setUsedLimit(BigDecimal.ZERO);
+        when(actuaryInfoRepository.findByEmployeeId(2L)).thenReturn(Optional.of(agent));
+        when(actuaryInfoRepository.findByEmployeeIdForUpdate(2L)).thenReturn(Optional.of(agent));
+
+        service.createBuyOrder(actuaryUser, buyRequest);
+        service.confirmOrder(actuaryUser, 100L);
+
+        verify(exchangeClient, times(1)).calculateWithoutCommission("USD", "RSD", new BigDecimal("1010.00"));
+        verify(exchangeClient, never()).calculate("USD", "RSD", new BigDecimal("1010.00"));
+    }
+
+    @Test
+    void multipleApprovedOrdersCannotOversubscribeAgentDailyLimit() {
+        ActuaryInfo agent = new ActuaryInfo();
+        agent.setEmployeeId(2L);
+        agent.setLimit(new BigDecimal("1500.00"));
+        agent.setUsedLimit(BigDecimal.ZERO);
+        agent.setReservedLimit(BigDecimal.ZERO);
+        when(actuaryInfoRepository.findByEmployeeId(2L)).thenReturn(Optional.of(agent));
+        when(actuaryInfoRepository.findByEmployeeIdForUpdate(2L)).thenReturn(Optional.of(agent));
+
+        CreateBuyOrderRequest first = new CreateBuyOrderRequest();
+        first.setListingId(42L);
+        first.setQuantity(10);
+        first.setAccountId(5L);
+
+        CreateBuyOrderRequest second = new CreateBuyOrderRequest();
+        second.setListingId(42L);
+        second.setQuantity(5);
+        second.setAccountId(5L);
+
+        service.createBuyOrder(actuaryUser, first);
+        OrderResponse firstResponse = service.confirmOrder(actuaryUser, 100L);
+
+        storedOrder.set(null);
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
+            Order order = invocation.getArgument(0);
+            if (order.getId() == null) {
+                order.setId(101L);
+            }
+            storedOrder.set(order);
+            return order;
+        });
+        when(orderRepository.findById(101L)).thenAnswer(invocation -> Optional.ofNullable(storedOrder.get()));
+
+        service.createBuyOrder(actuaryUser, second);
+        OrderResponse secondResponse = service.confirmOrder(actuaryUser, 101L);
+
+        assertThat(firstResponse.getStatus()).isEqualTo(OrderStatus.APPROVED);
+        assertThat(secondResponse.getStatus()).isEqualTo(OrderStatus.PENDING);
+    }
+
+    @Test
+    void agentCanTradeAgainAfterResetClearsReservedExposure() {
+        ActuaryInfo agent = new ActuaryInfo();
+        agent.setEmployeeId(2L);
+        agent.setLimit(new BigDecimal("1500.00"));
+        agent.setUsedLimit(BigDecimal.ZERO);
+        agent.setReservedLimit(new BigDecimal("1200.00"));
+        when(actuaryInfoRepository.findByEmployeeId(2L)).thenReturn(Optional.of(agent));
+        when(actuaryInfoRepository.findByEmployeeIdForUpdate(2L)).thenReturn(Optional.of(agent));
+
+        service.createBuyOrder(actuaryUser, buyRequest);
+        OrderResponse blockedResponse = service.confirmOrder(actuaryUser, 100L);
+
+        agent.setUsedLimit(BigDecimal.ZERO);
+        agent.setReservedLimit(BigDecimal.ZERO);
+        storedOrder.set(null);
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
+            Order order = invocation.getArgument(0);
+            if (order.getId() == null) {
+                order.setId(101L);
+            }
+            storedOrder.set(order);
+            return order;
+        });
+        when(orderRepository.findById(101L)).thenAnswer(invocation -> Optional.ofNullable(storedOrder.get()));
+
+        service.createBuyOrder(actuaryUser, buyRequest);
+        OrderResponse resetResponse = service.confirmOrder(actuaryUser, 101L);
+
+        assertThat(blockedResponse.getStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(resetResponse.getStatus()).isEqualTo(OrderStatus.APPROVED);
+    }
+
+    @Test
+    void approvalDecisionUsesLockedExposureState() {
+        ActuaryInfo staleAgent = new ActuaryInfo();
+        staleAgent.setEmployeeId(2L);
+        staleAgent.setLimit(new BigDecimal("5000.00"));
+        staleAgent.setUsedLimit(BigDecimal.ZERO);
+        staleAgent.setReservedLimit(BigDecimal.ZERO);
+
+        ActuaryInfo lockedAgent = new ActuaryInfo();
+        lockedAgent.setEmployeeId(2L);
+        lockedAgent.setLimit(new BigDecimal("1500.00"));
+        lockedAgent.setUsedLimit(BigDecimal.ZERO);
+        lockedAgent.setReservedLimit(new BigDecimal("1200.00"));
+
+        when(actuaryInfoRepository.findByEmployeeId(2L)).thenReturn(Optional.of(staleAgent));
+        when(actuaryInfoRepository.findByEmployeeIdForUpdate(2L)).thenReturn(Optional.of(lockedAgent));
+
+        service.createBuyOrder(actuaryUser, buyRequest);
+        OrderResponse response = service.confirmOrder(actuaryUser, 100L);
+
+        assertThat(response.getStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(lockedAgent.getReservedLimit()).isEqualByComparingTo("2370.00");
+    }
+
+    @Test
+    void afterHoursOnlyUsesDedicatedFlagNotClosedFlag() {
+        exchangeStatus.setClosed(true);
+        exchangeStatus.setOpen(false);
+        exchangeStatus.setAfterHours(false);
+
+        OrderResponse response = service.createBuyOrder(clientUser, buyRequest);
+
+        assertThat(response.getExchangeClosed()).isTrue();
+        assertThat(response.getAfterHours()).isFalse();
+    }
+
+    @Test
+    void cancellationReleasesReservationsAndExposure() {
+        ActuaryInfo agent = new ActuaryInfo();
+        agent.setEmployeeId(2L);
+        agent.setNeedApproval(true);
+        agent.setLimit(new BigDecimal("2000.00"));
+        agent.setUsedLimit(BigDecimal.ZERO);
+        agent.setReservedLimit(BigDecimal.ZERO);
+        Portfolio portfolio = new Portfolio();
+        portfolio.setUserId(2L);
+        portfolio.setListingId(42L);
+        portfolio.setQuantity(20);
+        portfolio.setReservedQuantity(0);
+        portfolio.setAveragePurchasePrice(new BigDecimal("90.00"));
+        when(actuaryInfoRepository.findByEmployeeId(2L)).thenReturn(Optional.of(agent));
+        when(actuaryInfoRepository.findByEmployeeIdForUpdate(2L)).thenReturn(Optional.of(agent));
+        when(portfolioRepository.findByUserIdAndListingId(2L, 42L)).thenReturn(Optional.of(portfolio));
+        when(portfolioRepository.findByUserIdAndListingIdForUpdate(2L, 42L)).thenReturn(Optional.of(portfolio));
+
+        service.createSellOrder(actuaryUser, sellRequest);
+        OrderResponse confirmed = service.confirmOrder(actuaryUser, 100L);
+        assertThat(confirmed.getStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(portfolio.getReservedQuantity()).isEqualTo(5);
+
+        service.declineOrder(77L, 100L);
+
+        assertThat(portfolio.getReservedQuantity()).isZero();
+        assertThat(agent.getReservedLimit()).isEqualByComparingTo("0.0000");
+    }
+
+    @Test
+    void expiredPendingOrderCannotBeCancelled() {
+        ActuaryInfo agent = new ActuaryInfo();
+        agent.setEmployeeId(2L);
+        agent.setNeedApproval(true);
+        agent.setLimit(new BigDecimal("2000.00"));
+        agent.setUsedLimit(BigDecimal.ZERO);
+        agent.setReservedLimit(BigDecimal.ZERO);
+        when(actuaryInfoRepository.findByEmployeeId(2L)).thenReturn(Optional.of(agent));
+        when(actuaryInfoRepository.findByEmployeeIdForUpdate(2L)).thenReturn(Optional.of(agent));
+
+        service.createBuyOrder(actuaryUser, buyRequest);
+        service.confirmOrder(actuaryUser, 100L);
+        listing.setSettlementDate(LocalDate.now().minusDays(1));
+
+        assertThatThrownBy(() -> service.cancelOrder(100L))
+                .isInstanceOf(BusinessConflictException.class)
+                .hasMessageContaining("only be declined");
     }
 
     @Test
@@ -722,6 +1024,8 @@ class OrderCreationServiceTest {
 
         assertThat(expiredPending.getStatus()).isEqualTo(OrderStatus.DECLINED);
         assertThat(expiredPending.getApprovedBy()).isEqualTo(OrderCreationServiceImpl.SYSTEM_APPROVAL);
+        assertThat(expiredPending.getIsDone()).isTrue();
+        assertThat(expiredPending.getRemainingPortions()).isZero();
         assertThat(activePending.getStatus()).isEqualTo(OrderStatus.PENDING);
         verify(orderRepository).save(expiredPending);
         verify(orderRepository, never()).save(activePending);

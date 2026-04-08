@@ -44,7 +44,7 @@ class PortfolioControllerTest {
 
         Jwt jwt = Jwt.withTokenValue("token")
                 .subject("42")
-                .claim("roles", List.of("CLIENT"))
+                .claim("roles", List.of("CLIENT_TRADING"))
                 .claim("permissions", List.of())
                 .header("alg", "none")
                 .build();
@@ -85,18 +85,18 @@ class PortfolioControllerTest {
     void portfolioEndpointsHaveExpectedMappingsAndSecurity() throws Exception {
         Method getPortfolio = PortfolioController.class.getDeclaredMethod("getPortfolio", Jwt.class);
         assertThat(getPortfolio.getAnnotation(GetMapping.class)).isNotNull();
-        assertThat(getPortfolio.getAnnotation(PreAuthorize.class).value()).isEqualTo("hasAnyRole('CLIENT','AGENT')");
+        assertThat(getPortfolio.getAnnotation(PreAuthorize.class).value()).isEqualTo("hasAnyRole('CLIENT_BASIC','CLIENT_TRADING','AGENT','SUPERVISOR')");
 
         Method setPublic = PortfolioController.class.getDeclaredMethod("setPublicQuantity", Jwt.class, Long.class, SetPublicQuantityRequestDto.class);
         PutMapping setPublicMapping = setPublic.getAnnotation(PutMapping.class);
         assertThat(setPublicMapping).isNotNull();
         assertThat(setPublicMapping.value()).containsExactly("/{id}/set-public");
-        assertThat(setPublic.getAnnotation(PreAuthorize.class).value()).isEqualTo("hasAnyRole('CLIENT','AGENT')");
+        assertThat(setPublic.getAnnotation(PreAuthorize.class).value()).isEqualTo("hasAnyRole('CLIENT_BASIC','CLIENT_TRADING','AGENT','SUPERVISOR')");
 
         Method exercise = PortfolioController.class.getDeclaredMethod("exerciseOption", Jwt.class, Long.class);
         PostMapping exerciseMapping = exercise.getAnnotation(PostMapping.class);
         assertThat(exerciseMapping).isNotNull();
         assertThat(exerciseMapping.value()).containsExactly("/{id}/exercise-option");
-        assertThat(exercise.getAnnotation(PreAuthorize.class).value()).isEqualTo("hasRole('AGENT')");
+        assertThat(exercise.getAnnotation(PreAuthorize.class).value()).isEqualTo("hasAnyRole('AGENT','SUPERVISOR')");
     }
 }
