@@ -24,7 +24,7 @@ public class StockExchangeAdminController {
      * @return import summary for the executed CSV load
      */
     @PostMapping("/import")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAnyRole('SUPERVISOR', 'ADMIN', 'SERVICE')")
     public StockExchangeImportResponse importStockExchanges() {
         return stockExchangeCsvImportService.importFromConfiguredCsv();
     }

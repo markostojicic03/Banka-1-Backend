@@ -33,7 +33,7 @@ public class StockExchangeController {
      * @return list of exchanges
      */
     @GetMapping("/api/stock-exchanges")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAnyRole('CLIENT_BASIC', 'BASIC', 'AGENT', 'SUPERVISOR', 'ADMIN', 'SERVICE')")
     public ResponseEntity<List<StockExchangeResponse>> getStockExchanges() {
         List<StockExchangeResponse> response = stockExchangeService.getStockExchanges();
         return ResponseEntity.ok(response);
@@ -46,7 +46,7 @@ public class StockExchangeController {
      * @return runtime market-status response
      */
     @GetMapping("/api/stock-exchanges/{id}/is-open")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAnyRole('CLIENT_BASIC', 'BASIC', 'AGENT', 'SUPERVISOR', 'ADMIN', 'SERVICE')")
     public ResponseEntity<StockExchangeStatusResponse> getStockExchangeStatus(@PathVariable Long id) {
         StockExchangeStatusResponse response = stockExchangeService.getStockExchangeStatus(id);
         return ResponseEntity.ok(response);

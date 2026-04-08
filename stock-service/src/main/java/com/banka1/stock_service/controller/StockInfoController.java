@@ -54,7 +54,7 @@ public class StockInfoController {
      * @return exchange service response
      */
     @GetMapping("/exchange/info")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAnyRole('CLIENT_BASIC', 'BASIC', 'AGENT', 'SUPERVISOR', 'ADMIN', 'SERVICE')")
     public ExchangeServiceInfoResponse exchangeInfo() {
         return exchangeServiceClient.getInfo();
     }

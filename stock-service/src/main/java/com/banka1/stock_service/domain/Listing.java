@@ -108,6 +108,12 @@ public class Listing {
     private BigDecimal bid;
 
     /**
+     * Absolute price change reported in the latest snapshot.
+     */
+    @Column(name = "change", nullable = false, precision = 19, scale = 8)
+    private BigDecimal change;
+
+    /**
      * Latest traded volume in the current snapshot.
      */
     @Column(name = "volume", nullable = false)

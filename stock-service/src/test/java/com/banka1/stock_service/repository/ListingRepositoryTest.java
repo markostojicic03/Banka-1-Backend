@@ -35,7 +35,7 @@ class ListingRepositoryTest {
     private EntityManager entityManager;
 
     @Test
-    void shouldPersistListingAndLoadItByTicker() {
+    void shouldPersistListingAndLoadItByListingTypeAndSecurityId() {
         StockExchange exchange = stockExchangeRepository.saveAndFlush(createExchange("Nasdaq", "NASDAQ", "XNAS"));
 
         Listing listing = createListing(
@@ -48,17 +48,19 @@ class ListingRepositoryTest {
                 new BigDecimal("212.40000000"),
                 new BigDecimal("212.50000000"),
                 new BigDecimal("212.30000000"),
+                new BigDecimal("4.60000000"),
                 25_000L
         );
         listingRepository.saveAndFlush(listing);
 
-        Listing persisted = listingRepository.findByTicker("AAPL").orElseThrow();
+        Listing persisted = listingRepository.findByListingTypeAndSecurityId(ListingType.STOCK, 11L).orElseThrow();
 
         assertTrue(persisted.getId() != null);
         assertEquals(11L, persisted.getSecurityId());
         assertEquals(ListingType.STOCK, persisted.getListingType());
         assertEquals(exchange.getId(), persisted.getStockExchange().getId());
         assertEquals(new BigDecimal("212.40000000"), persisted.getPrice());
+        assertEquals(new BigDecimal("4.60000000"), persisted.getChange());
         assertEquals(25_000L, persisted.getVolume());
     }
 
@@ -79,6 +81,7 @@ class ListingRepositoryTest {
                                 new BigDecimal("1.08350000"),
                                 new BigDecimal("1.08360000"),
                                 new BigDecimal("1.08340000"),
+                                new BigDecimal("0.00120000"),
                                 50_000L
                         )
                 )
@@ -95,6 +98,7 @@ class ListingRepositoryTest {
             BigDecimal price,
             BigDecimal ask,
             BigDecimal bid,
+            BigDecimal change,
             Long volume
     ) {
         Listing listing = new Listing();
@@ -107,6 +111,7 @@ class ListingRepositoryTest {
         listing.setPrice(price);
         listing.setAsk(ask);
         listing.setBid(bid);
+        listing.setChange(change);
         listing.setVolume(volume);
         return listing;
     }

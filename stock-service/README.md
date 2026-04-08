@@ -12,6 +12,7 @@ The service currently provides:
 - persisted stock option reference data linked to underlying stocks
 - persisted current and daily listing market data with exchange-linked snapshots
 - stock exchange work-time/status endpoints
+- Alpha Vantage-backed stock market-data refresh flow for local stocks and listings
 - JWT authentication through `security-lib`
 - observability integration through `company-observability-starter`
 - a REST adapter to `exchange-service`
@@ -35,6 +36,7 @@ The service uses:
 - `SecurityBeans` with a JWT decoder bean
 - `RestClientConfig` and configuration properties for `exchange-service`
 - `ExchangeServiceClient` adapter for `exchange-service`
+- `AlphaVantageClient` adapter for external stock market data
 - `StockExchange` JPA entity and repository
 - `Stock` JPA entity and repository
 - `FuturesContract` JPA entity and repository
@@ -46,6 +48,7 @@ The service uses:
 - startup CSV import flow for FX pair reference data
 - stock exchange listing and market-status API
 - stock exchange active-toggle endpoint for testing
+- administrative stock market-data refresh endpoint
 - timezone/session-based market-phase calculation
 - `HolidayService` extension point with a temporary no-op implementation
 - public `GET /info` endpoint
@@ -71,6 +74,7 @@ That means:
 - FX pair metadata can now be persisted as a dedicated `forex_pair` entity
 - stock option metadata can now be persisted as a dedicated `stock_option` entity linked to `stock`
 - current and daily historical market snapshots can now be persisted as `listing` and `listing_daily_price_info`
+- local stock and listing snapshots can now be refreshed from Alpha Vantage quote, daily, and overview endpoints
 - stock exchange work-time checks are implemented
 - holiday support is intentionally left behind an interface and currently uses a no-op stub
 
@@ -80,12 +84,12 @@ The most important parts of the service are:
 
 - `config` configuration properties and `RestClient` beans
 - `security` JWT configuration for the resource server
-- `client` adapter for calling `exchange-service`
+- `client` adapters for calling `exchange-service` and Alpha Vantage
 - `controller` bootstrap REST endpoints
 - `repository` persistence access for stock exchanges, stocks, futures contracts, FX pairs, stock options, and listings
 - `domain` persisted stock exchange, stock, futures contract, FX pair, stock option, and listing entities with derived calculations
-- `service` CSV import, startup seeding, holiday abstraction, and market-status logic
-- `dto` request/response models for internal responses
+- `service` CSV import, startup seeding, holiday abstraction, market-status logic, and stock market-data refresh orchestration
+- `dto` request/response models for internal and external-provider normalization
 
 ## API Endpoints
 
@@ -97,6 +101,7 @@ Inside the service itself, the routes are:
 - `GET /api/stock-exchanges/{id}/is-open`
 - `PUT /api/stock-exchanges/{id}/toggle-active`
 - `POST /admin/stock-exchanges/import`
+- `POST /admin/stocks/{ticker}/refresh-market-data`
 - `GET /actuator/health`
 - `GET /actuator/health/liveness`
 - `GET /actuator/health/readiness`
@@ -109,6 +114,7 @@ Through the API gateway, the same routes are available under the prefix:
 - `GET /stock/api/stock-exchanges/{id}/is-open`
 - `PUT /stock/api/stock-exchanges/{id}/toggle-active`
 - `POST /stock/admin/stock-exchanges/import`
+- `POST /stock/admin/stocks/{ticker}/refresh-market-data`
 
 Note:
 
@@ -136,7 +142,7 @@ Example response:
   "status": "UP",
   "gatewayPrefix": "/stock",
   "exchangeServiceBaseUrl": "http://exchange-service:8085",
-  "marketDataBaseUrl": "https://api.twelvedata.com",
+  "marketDataBaseUrl": "https://www.alphavantage.co",
   "marketDataApiKeyConfigured": false
 }
 ```
@@ -170,6 +176,34 @@ Example response:
   "createdCount": 10,
   "updatedCount": 0,
   "unchangedCount": 0
+}
+```
+
+### `POST /admin/stocks/{ticker}/refresh-market-data`
+
+JWT-protected administrative endpoint that refreshes one locally stored stock ticker from Alpha Vantage.
+
+The refresh flow calls three provider endpoints:
+
+- `GLOBAL_QUOTE` for current listing `price`, `ask`, `bid`, `change`, and `volume`
+- `TIME_SERIES_DAILY` for `listing_daily_price_info` upserts
+- `OVERVIEW` for `stock.outstandingShares` and `stock.dividendYield`
+
+The endpoint updates:
+
+- `stock.name`, `stock.outstandingShares`, and `stock.dividendYield` when the provider returns them
+- `listing.price`, `listing.ask`, `listing.bid`, `listing.change`, `listing.volume`, and `listing.lastRefresh`
+- `listing_daily_price_info` rows using idempotent upsert by `listingId + date`
+
+Example response:
+
+```json
+{
+  "ticker": "AAPL",
+  "stockId": 1,
+  "listingId": 10,
+  "refreshedDailyEntries": 30,
+  "lastRefresh": "2026-04-08T10:15:30"
 }
 ```
 
@@ -270,6 +304,7 @@ The stock-service schema currently includes:
 - `src/main/resources/db/changelog/006-create-stock-option.sql`
 - `src/main/resources/db/changelog/007-create-listing.sql`
 - `src/main/resources/db/changelog/008-create-listing-daily-price-info.sql`
+- `src/main/resources/db/changelog/009-update-listing-market-data.sql`
 
 The `stock_exchange` table stores exchange metadata and trading sessions used by the CSV import flow.
 
@@ -313,13 +348,19 @@ The `listing` table stores:
 - foreign key `stock_exchange_id` pointing to `stock_exchange`
 - ticker and display name
 - last refresh timestamp
-- latest price, ask, bid, and volume
+- latest price, ask, bid, change, and volume
 
 The `listing_daily_price_info` table stores:
 
 - foreign key `listing_id` pointing to `listing`
 - trading date
 - daily price, ask, bid, change, and volume
+
+The refresh flow also relies on these relational rules:
+
+- `listing.stock_exchange_id` must point to an existing `stock_exchange`
+- `listing_daily_price_info.listing_id` must point to an existing `listing`
+- `listing_daily_price_info` enforces uniqueness on `listing_id + date` to support idempotent daily upserts
 
 Derived values are intentionally kept in the Java domain model instead of being persisted:
 
@@ -382,7 +423,9 @@ All other routes require a valid JWT token.
 Additional role rules:
 
 - `PUT /api/stock-exchanges/{id}/toggle-active` requires `ADMIN` or `SUPERVISOR`
-- the listing and `is-open` endpoints only require authentication
+- `POST /admin/stock-exchanges/import` requires `ADMIN`, `SUPERVISOR`, or `SERVICE`
+- `POST /admin/stocks/{ticker}/refresh-market-data` requires `ADMIN` or `SUPERVISOR`
+- `GET /exchange/info`, `GET /api/stock-exchanges`, and `GET /api/stock-exchanges/{id}/is-open` require one of `CLIENT_BASIC`, `BASIC`, `AGENT`, `SUPERVISOR`, `ADMIN`, or `SERVICE`
 
 The local JWT decoder uses the shared HMAC secret from:
 
@@ -420,8 +463,9 @@ STOCK_EXCHANGE_SERVICE_URL=http://localhost:8085
 STOCK_EXCHANGE_SEED_CSV_LOCATION=classpath:seed/exchanges.csv
 STOCK_FUTURES_SEED_CSV_LOCATION=classpath:seed/futures_seed.csv
 STOCK_FOREX_SEED_CSV_LOCATION=classpath:seed/forex_pairs_seed.csv
-STOCK_MARKET_DATA_BASE_URL=https://api.twelvedata.com
+STOCK_MARKET_DATA_BASE_URL=https://www.alphavantage.co
 STOCK_MARKET_DATA_API_KEY=replace_with_provider_api_key
+STOCK_MARKET_DATA_DAILY_HISTORY_LIMIT=30
 ```
 
 `STOCK_DB_EX_PORT` is used by `docker compose` for host port mapping. The application itself uses `STOCK_DB_PORT`.
@@ -443,7 +487,7 @@ Most important properties:
 | `stock.forex-seed.csv-location` | Spring resource location of the FX pair CSV seed file |
 | `stock.market-data.base-url` | base URL for the external stock market data provider |
 | `stock.market-data.api-key` | API key for the external market data provider |
-| `stock.market-data.default-exchange` | default exchange for future stock queries |
+| `stock.market-data.daily-history-limit` | maximum number of recent daily snapshots persisted during one refresh |
 
 ## What Happens on Startup
 
@@ -630,6 +674,7 @@ Note:
 - unit tests now also cover FX pair CSV import, derived nominal value and maintenance margin, and JPA/Liquibase persistence mapping
 - unit tests now also cover stock option derived maintenance margin, JPA/Liquibase persistence mapping, and FK enforcement toward `stock`
 - unit tests now also cover listing and daily listing derived analytics plus FK enforcement toward `stock_exchange` and `listing`
+- unit tests now also cover Alpha Vantage client parsing, timeout/error handling, and stock refresh mapping with mock API payloads
 - the tests do not start the full application stack
 
 ## Swagger and OpenAPI

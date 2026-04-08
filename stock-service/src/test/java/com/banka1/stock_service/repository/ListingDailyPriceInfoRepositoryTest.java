@@ -86,6 +86,35 @@ class ListingDailyPriceInfoRepositoryTest {
         );
     }
 
+    @Test
+    void shouldEnforceUniqueConstraintForListingAndDate() {
+        StockExchange exchange = stockExchangeRepository.saveAndFlush(createExchange("Nasdaq", "NASDAQ", "XNAS"));
+        Listing listing = listingRepository.saveAndFlush(createListing(exchange));
+
+        listingDailyPriceInfoRepository.saveAndFlush(createDailyPriceInfo(
+                listing,
+                LocalDate.of(2026, 4, 8),
+                new BigDecimal("212.40000000"),
+                new BigDecimal("212.50000000"),
+                new BigDecimal("212.30000000"),
+                new BigDecimal("4.60000000"),
+                25_000L
+        ));
+
+        assertThrows(
+                DataIntegrityViolationException.class,
+                () -> listingDailyPriceInfoRepository.saveAndFlush(createDailyPriceInfo(
+                        listing,
+                        LocalDate.of(2026, 4, 8),
+                        new BigDecimal("213.00000000"),
+                        new BigDecimal("213.10000000"),
+                        new BigDecimal("212.90000000"),
+                        new BigDecimal("0.60000000"),
+                        26_000L
+                ))
+        );
+    }
+
     private Listing createListing(StockExchange exchange) {
         Listing listing = new Listing();
         listing.setSecurityId(11L);
@@ -97,6 +126,7 @@ class ListingDailyPriceInfoRepositoryTest {
         listing.setPrice(new BigDecimal("212.40000000"));
         listing.setAsk(new BigDecimal("212.50000000"));
         listing.setBid(new BigDecimal("212.30000000"));
+        listing.setChange(new BigDecimal("4.60000000"));
         listing.setVolume(25_000L);
         return listing;
     }

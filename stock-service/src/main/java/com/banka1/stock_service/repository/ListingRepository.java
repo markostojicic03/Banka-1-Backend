@@ -1,6 +1,7 @@
 package com.banka1.stock_service.repository;
 
 import com.banka1.stock_service.domain.Listing;
+import com.banka1.stock_service.domain.ListingType;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -12,12 +13,13 @@ import java.util.Optional;
 public interface ListingRepository extends JpaRepository<Listing, Long> {
 
     /**
-     * Finds one listing by its ticker.
+     * Finds one listing by its category and underlying security identifier.
      *
-     * @param ticker listing ticker
+     * @param listingType listing category
+     * @param securityId underlying security identifier
      * @return matching listing if present
      */
-    Optional<Listing> findByTicker(String ticker);
+    Optional<Listing> findByListingTypeAndSecurityId(ListingType listingType, Long securityId);
 
     /**
      * Loads all listings quoted on one stock exchange ordered by ticker.
