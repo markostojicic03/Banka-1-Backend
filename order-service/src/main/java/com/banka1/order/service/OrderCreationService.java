@@ -67,6 +67,15 @@ public interface OrderCreationService {
     OrderResponse cancelOrder(Long orderId);
 
     /**
+     * Cancels the remaining unfilled portion, or part of it, for supervisor actions.
+     *
+     * @param orderId the order to cancel
+     * @param quantityToCancel null to cancel all remaining quantity, otherwise the quantity to cancel from the remainder
+     * @return the updated order response
+     */
+    OrderResponse cancelOrder(Long orderId, Integer quantityToCancel);
+
+    /**
      * Approves a pending actuary order.
      *
      * @param supervisorId the approving supervisor

@@ -1,6 +1,6 @@
 package com.banka1.order.controller;
 
-import com.banka1.order.advice.GlobalExceptionHandler;
+import com.banka1.order.advice.OrderServiceExceptionHandler;
 import com.banka1.order.dto.OrderResponse;
 import com.banka1.order.entity.enums.OrderDirection;
 import com.banka1.order.entity.enums.OrderStatus;
@@ -47,7 +47,7 @@ class OrderControllerWebMvcTest {
         mockMvc = MockMvcBuilders.standaloneSetup(new OrderController(orderCreationService))
                 .setCustomArgumentResolvers(new JwtRequestAttributeResolver())
                 .setValidator(validator)
-                .setControllerAdvice(new GlobalExceptionHandler())
+                .setControllerAdvice(new OrderServiceExceptionHandler())
                 .build();
     }
 
@@ -57,7 +57,7 @@ class OrderControllerWebMvcTest {
                 .thenThrow(new ResourceNotFoundException("Order not found"));
 
         mockMvc.perform(post("/api/orders/99/confirm")
-                        .requestAttr("jwt", jwtPrincipal(List.of("CLIENT"))))
+                        .requestAttr("jwt", jwtPrincipal(List.of("CLIENT_TRADING"))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
                 .andExpect(jsonPath("$.error").value("Not Found"))
@@ -71,7 +71,7 @@ class OrderControllerWebMvcTest {
                 .thenThrow(new BusinessConflictException("Insufficient funds"));
 
         mockMvc.perform(post("/api/orders/100/confirm")
-                        .requestAttr("jwt", jwtPrincipal(List.of("CLIENT"))))
+                        .requestAttr("jwt", jwtPrincipal(List.of("CLIENT_TRADING"))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.status").value(409))
                 .andExpect(jsonPath("$.message").value("Insufficient funds"));
@@ -106,7 +106,7 @@ class OrderControllerWebMvcTest {
                 .thenThrow(new ForbiddenOperationException("Order does not belong to the authenticated user"));
 
         mockMvc.perform(post("/api/orders/100/cancel")
-                        .requestAttr("jwt", jwtPrincipal(List.of("CLIENT"))))
+                        .requestAttr("jwt", jwtPrincipal(List.of("CLIENT_TRADING"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.status").value(403))
                 .andExpect(jsonPath("$.message").value("Order does not belong to the authenticated user"));
@@ -122,7 +122,7 @@ class OrderControllerWebMvcTest {
         when(orderCreationService.confirmOrder(any(), eq(100L))).thenReturn(response);
 
         mockMvc.perform(post("/api/orders/100/confirm")
-                        .requestAttr("jwt", jwtPrincipal(List.of("CLIENT"))))
+                        .requestAttr("jwt", jwtPrincipal(List.of("CLIENT_TRADING"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(100))
                 .andExpect(jsonPath("$.status").value("APPROVED"));
@@ -131,7 +131,7 @@ class OrderControllerWebMvcTest {
     @Test
     void invalidBuyPayload_returns400WithFieldErrors() throws Exception {
         mockMvc.perform(post("/api/orders/buy")
-                        .requestAttr("jwt", jwtPrincipal(List.of("CLIENT")))
+                        .requestAttr("jwt", jwtPrincipal(List.of("CLIENT_TRADING")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -146,7 +146,6 @@ class OrderControllerWebMvcTest {
                 .andExpect(jsonPath("$.message").value("Request validation failed"))
                 .andExpect(jsonPath("$.fieldErrors.listingId").exists())
                 .andExpect(jsonPath("$.fieldErrors.quantity").exists())
-                .andExpect(jsonPath("$.fieldErrors.accountId").exists())
                 .andExpect(jsonPath("$.fieldErrors.limitValue").exists());
 
         verifyNoInteractions(orderCreationService);

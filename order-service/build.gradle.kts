@@ -9,6 +9,10 @@ plugins {
     checkstyle
 }
 
+val openApiPort = System.getenv("OPENAPI_PORT")
+    ?: System.getenv("ORDER_SERVER_PORT")
+    ?: "8088"
+
 group = "com.banka1"
 version = "0.0.1-SNAPSHOT"
 description = "Order service for managing actuaries, orders, portfolio and tax"
@@ -48,6 +52,7 @@ dependencies {
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.2")
     implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server")
     compileOnly("org.projectlombok:lombok")
+    runtimeOnly("com.h2database:h2")
     runtimeOnly("org.postgresql:postgresql")
     annotationProcessor("org.projectlombok:lombok")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
@@ -75,7 +80,7 @@ jacoco {
 }
 
 openApi {
-    apiDocsUrl.set("http://localhost:8088/v3/api-docs.yaml")
+    apiDocsUrl.set("http://localhost:$openApiPort/v3/api-docs.yaml")
     outputDir.set(file("docs"))
     outputFileName.set("openapi.yml")
     waitTimeInSeconds.set(30)

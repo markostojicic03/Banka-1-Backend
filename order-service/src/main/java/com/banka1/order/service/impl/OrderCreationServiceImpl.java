@@ -17,6 +17,7 @@ import com.banka1.order.dto.OrderNotificationPayload;
 import com.banka1.order.dto.OrderOverviewResponse;
 import com.banka1.order.dto.OrderResponse;
 import com.banka1.order.dto.StockListingDto;
+import com.banka1.order.dto.client.PaymentDto;
 import com.banka1.order.entity.ActuaryInfo;
 import com.banka1.order.entity.Order;
 import com.banka1.order.entity.Portfolio;
@@ -78,7 +79,9 @@ public class OrderCreationServiceImpl implements OrderCreationService {
         validateBuyOrderRequest(request);
 
         StockListingDto listing = stockClient.getListing(request.getListingId());
-        ExchangeStatusDto exchangeStatus = stockClient.getExchangeStatus(listing.getExchangeId());
+        validateTradingAccess(user, listing);
+        ExchangeWindow exchangeWindow = resolveExchangeWindow(listing);
+        Long accountId = initialBuyAccountId(user, request.getAccountId(), listing.getCurrency());
         OrderType orderType = determineOrderType(request.getLimitValue(), request.getStopValue());
         BigDecimal approximatePrice = calculateApproximatePrice(orderType, OrderDirection.BUY, listing, request.getQuantity(),
                 request.getLimitValue(), request.getStopValue());
@@ -86,22 +89,23 @@ public class OrderCreationServiceImpl implements OrderCreationService {
 
         Order order = buildBaseOrder(user.userId(), request.getListingId(), orderType, request.getQuantity(), listing,
                 request.getLimitValue(), request.getStopValue(), OrderDirection.BUY, request.getAllOrNone(),
-                request.getMargin(), request.getAccountId(), isAfterHoursOrClosed(exchangeStatus));
+                request.getMargin(), accountId, exchangeWindow);
         order.setStatus(OrderStatus.PENDING_CONFIRMATION);
         order.setApprovedBy(null);
 
         order = orderRepository.save(order);
-        return mapToResponse(order, approximatePrice, fee);
+        return mapToResponse(order, approximatePrice, fee, exchangeWindow.closed());
     }
 
     @Override
     @Transactional
     public OrderResponse createSellOrder(AuthenticatedUser user, CreateSellOrderRequest request) {
         validateSellOrderRequest(request);
-        ensurePortfolioOwnership(user.userId(), request.getListingId(), request.getQuantity());
 
         StockListingDto listing = stockClient.getListing(request.getListingId());
-        ExchangeStatusDto exchangeStatus = stockClient.getExchangeStatus(listing.getExchangeId());
+        validateTradingAccess(user, listing);
+        ensurePortfolioOwnership(user.userId(), request.getListingId(), request.getQuantity());
+        ExchangeWindow exchangeWindow = resolveExchangeWindow(listing);
         OrderType orderType = determineOrderType(request.getLimitValue(), request.getStopValue());
         BigDecimal approximatePrice = calculateApproximatePrice(orderType, OrderDirection.SELL, listing, request.getQuantity(),
                 request.getLimitValue(), request.getStopValue());
@@ -109,12 +113,12 @@ public class OrderCreationServiceImpl implements OrderCreationService {
 
         Order order = buildBaseOrder(user.userId(), request.getListingId(), orderType, request.getQuantity(), listing,
                 request.getLimitValue(), request.getStopValue(), OrderDirection.SELL, request.getAllOrNone(),
-                request.getMargin(), request.getAccountId(), isAfterHoursOrClosed(exchangeStatus));
+                request.getMargin(), request.getAccountId(), exchangeWindow);
         order.setStatus(OrderStatus.PENDING_CONFIRMATION);
         order.setApprovedBy(null);
 
         order = orderRepository.save(order);
-        return mapToResponse(order, approximatePrice, fee);
+        return mapToResponse(order, approximatePrice, fee, exchangeWindow.closed());
     }
 
     @Override
@@ -159,8 +163,10 @@ public class OrderCreationServiceImpl implements OrderCreationService {
         }
 
         StockListingDto listing = stockClient.getListing(order.getListingId());
-        ExchangeStatusDto exchangeStatus = stockClient.getExchangeStatus(listing.getExchangeId());
-        order.setAfterHours(isAfterHoursOrClosed(exchangeStatus));
+        validateTradingAccess(user, listing);
+        ExchangeWindow exchangeWindow = resolveExchangeWindow(listing);
+        order.setAfterHours(exchangeWindow.afterHours());
+        order.setExchangeClosed(exchangeWindow.closed());
 
         BigDecimal approximatePrice = calculateApproximatePrice(order.getOrderType(), order.getDirection(), listing,
                 order.getQuantity(), order.getLimitValue(), order.getStopValue());
@@ -169,43 +175,56 @@ public class OrderCreationServiceImpl implements OrderCreationService {
         if (hasPastSettlementDate(listing)) {
             order.setStatus(OrderStatus.DECLINED);
             order.setApprovedBy(SYSTEM_APPROVAL);
+            order.setRemainingPortions(0);
+            order.setIsDone(true);
             order = orderRepository.save(order);
-            return mapToResponse(order, approximatePrice, fee);
+            return mapToResponse(order, approximatePrice, fee, exchangeWindow.closed());
         }
 
         Long fundingAccountId = determineFundingAccountId(user.userId(), order.getAccountId(), listing.getCurrency());
+        if (order.getDirection() == OrderDirection.BUY && !user.isClient()) {
+            order.setAccountId(fundingAccountId);
+        }
         if (Boolean.TRUE.equals(order.getMargin())) {
             checkMarginRequirements(user, fundingAccountId, listing, order.getQuantity());
         } else if (order.getDirection() == OrderDirection.BUY) {
             checkFunds(fundingAccountId, approximatePrice.add(fee));
         }
-        OrderStatus finalStatus = determineOrderStatus(user.userId(), approximatePrice, listing.getCurrency());
-        if(finalStatus == OrderStatus.APPROVED) {
-            transferFee(order.getAccountId(), fee, listing.getCurrency());
+        ApprovalReservationDecision decision = determineOrderStatusAndReserveExposure(user.userId(), approximatePrice, listing.getCurrency());
+        reserveSellQuantityIfNeeded(order);
+        if (decision.status() == OrderStatus.APPROVED) {
+            transferFee(user, fundingAccountId, fee, listing.getCurrency());
         }
 
-        order.setStatus(finalStatus);
-        order.setApprovedBy(finalStatus == OrderStatus.APPROVED ? NO_APPROVAL_REQUIRED : null);
+        order.setStatus(decision.status());
+        order.setApprovedBy(decision.status() == OrderStatus.APPROVED ? NO_APPROVAL_REQUIRED : null);
+        order.setReservedLimitExposure(decision.reservedExposure());
         order = orderRepository.save(order);
 
-        if (finalStatus == OrderStatus.APPROVED) {
+        if (decision.status() == OrderStatus.APPROVED) {
             orderExecutionService.executeOrderAsync(order.getId());
         }
-        return mapToResponse(order, approximatePrice, fee);
+        return mapToResponse(order, approximatePrice, fee, exchangeWindow.closed());
     }
 
     @Override
     @Transactional
     public OrderResponse cancelOrder(AuthenticatedUser user, Long orderId) {
         Order order = getOwnedOrderForUpdate(user.userId(), orderId);
-        return cancelOrderInternal(order);
+        return cancelOrderInternal(order, null);
     }
 
     @Override
     @Transactional
     public OrderResponse cancelOrder(Long orderId) {
+        return cancelOrder(orderId, null);
+    }
+
+    @Override
+    @Transactional
+    public OrderResponse cancelOrder(Long orderId, Integer quantityToCancel) {
         Order order = orderRepository.findByIdForUpdate(orderId).orElseThrow(() -> new ResourceNotFoundException("Order not found"));
-        return cancelOrderInternal(order);
+        return cancelOrderInternal(order, quantityToCancel);
     }
 
     @Override
@@ -224,7 +243,8 @@ public class OrderCreationServiceImpl implements OrderCreationService {
         BigDecimal approximatePrice = calculateApproximatePrice(order.getOrderType(), order.getDirection(), listing,
                 order.getQuantity(), order.getLimitValue(), order.getStopValue());
         BigDecimal fee = calculateFee(orderPricingFamily(order.getOrderType()), approximatePrice, listing.getCurrency());
-        transferFee(order.getAccountId(), fee, listing.getCurrency());
+        Long fundingAccountId = determineFundingAccountId(order.getUserId(), order.getAccountId(), listing.getCurrency());
+        transferFee(resolveAuthenticatedActor(order.getUserId()), fundingAccountId, fee, listing.getCurrency());
 
         order.setStatus(OrderStatus.APPROVED);
         order.setApprovedBy(supervisorId);
@@ -232,7 +252,7 @@ public class OrderCreationServiceImpl implements OrderCreationService {
         publishOrderDecisionNotification(order, supervisorId, OrderStatus.APPROVED);
         orderExecutionService.executeOrderAsync(order.getId());
 
-        return mapToResponse(order, approximatePrice, fee);
+        return mapToResponse(order, approximatePrice, fee, order.getExchangeClosed());
     }
 
     @Override
@@ -247,7 +267,7 @@ public class OrderCreationServiceImpl implements OrderCreationService {
         StockListingDto listing = stockClient.getListing(order.getListingId());
         BigDecimal approximatePrice = calculateApproximatePrice(order.getOrderType(), order.getDirection(), listing,
                 order.getQuantity(), order.getLimitValue(), order.getStopValue());
-        return mapToResponse(order, approximatePrice, calculateFee(orderPricingFamily(order.getOrderType()), approximatePrice, listing.getCurrency()));
+        return mapToResponse(order, approximatePrice, calculateFee(orderPricingFamily(order.getOrderType()), approximatePrice, listing.getCurrency()), order.getExchangeClosed());
     }
 
     @Override
@@ -270,7 +290,7 @@ public class OrderCreationServiceImpl implements OrderCreationService {
 
     private Order buildBaseOrder(Long userId, Long listingId, OrderType orderType, Integer quantity, StockListingDto listing,
                                  BigDecimal limitValue, BigDecimal stopValue, OrderDirection direction, Boolean allOrNone,
-                                 Boolean margin, Long accountId, boolean afterHours) {
+                                 Boolean margin, Long accountId, ExchangeWindow exchangeWindow) {
         Order order = new Order();
         order.setUserId(userId);
         order.setListingId(listingId);
@@ -283,7 +303,8 @@ public class OrderCreationServiceImpl implements OrderCreationService {
         order.setDirection(direction);
         order.setIsDone(false);
         order.setRemainingPortions(quantity);
-        order.setAfterHours(afterHours);
+        order.setAfterHours(exchangeWindow.afterHours());
+        order.setExchangeClosed(exchangeWindow.closed());
         order.setAllOrNone(Boolean.TRUE.equals(allOrNone));
         order.setMargin(Boolean.TRUE.equals(margin));
         order.setAccountId(accountId);
@@ -291,17 +312,20 @@ public class OrderCreationServiceImpl implements OrderCreationService {
     }
 
     private void validateBuyOrderRequest(CreateBuyOrderRequest request) {
-        validateCommonRequest(request.getListingId(), request.getQuantity(), request.getAccountId(),
+        validateCommonRequest(request.getListingId(), request.getQuantity(),
                 request.getLimitValue(), request.getStopValue());
     }
 
     private void validateSellOrderRequest(CreateSellOrderRequest request) {
-        validateCommonRequest(request.getListingId(), request.getQuantity(), request.getAccountId(),
+        if (request.getAccountId() == null) {
+            throw new BadRequestException("Invalid request parameters");
+        }
+        validateCommonRequest(request.getListingId(), request.getQuantity(),
                 request.getLimitValue(), request.getStopValue());
     }
 
-    private void validateCommonRequest(Long listingId, Integer quantity, Long accountId, BigDecimal limitValue, BigDecimal stopValue) {
-        if (listingId == null || quantity == null || quantity <= 0 || accountId == null) {
+    private void validateCommonRequest(Long listingId, Integer quantity, BigDecimal limitValue, BigDecimal stopValue) {
+        if (listingId == null || quantity == null || quantity <= 0) {
             throw new BadRequestException("Invalid request parameters");
         }
         if (limitValue != null && limitValue.compareTo(BigDecimal.ZERO) <= 0) {
@@ -312,24 +336,39 @@ public class OrderCreationServiceImpl implements OrderCreationService {
         }
     }
 
-    private OrderResponse cancelOrderInternal(Order order) {
+    private OrderResponse cancelOrderInternal(Order order, Integer quantityToCancel) {
         if (order.getStatus() == OrderStatus.DONE || order.getStatus() == OrderStatus.CANCELLED || order.getStatus() == OrderStatus.DECLINED) {
             throw new BusinessConflictException("Order can no longer be cancelled");
         }
-        order.setStatus(OrderStatus.CANCELLED);
-        order.setIsDone(true);
+        StockListingDto listing = stockClient.getListing(order.getListingId());
+        if (order.getStatus() == OrderStatus.PENDING && hasPastSettlementDate(listing)) {
+            throw new BusinessConflictException("Expired pending orders can only be declined");
+        }
+        int cancelQuantity = quantityToCancel == null ? order.getRemainingPortions() : quantityToCancel;
+        if (cancelQuantity <= 0 || cancelQuantity > order.getRemainingPortions()) {
+            throw new BadRequestException("Invalid cancellation quantity");
+        }
+
+        releaseReservedState(order, cancelQuantity);
+        order.setRemainingPortions(order.getRemainingPortions() - cancelQuantity);
+        if (order.getRemainingPortions() == 0) {
+            order.setStatus(OrderStatus.CANCELLED);
+            order.setIsDone(true);
+        }
         order = orderRepository.save(order);
 
-        StockListingDto listing = stockClient.getListing(order.getListingId());
         BigDecimal approximatePrice = calculateApproximatePrice(order.getOrderType(), order.getDirection(), listing,
                 order.getQuantity(), order.getLimitValue(), order.getStopValue());
         return mapToResponse(order, approximatePrice,
-                calculateFee(orderPricingFamily(order.getOrderType()), approximatePrice, listing.getCurrency()));
+                calculateFee(orderPricingFamily(order.getOrderType()), approximatePrice, listing.getCurrency()), order.getExchangeClosed());
     }
 
     private Order declinePendingOrder(Order order, Long approverId, boolean publishNotification) {
+        releaseReservedState(order, order.getRemainingPortions());
         order.setStatus(OrderStatus.DECLINED);
         order.setApprovedBy(approverId);
+        order.setRemainingPortions(0);
+        order.setIsDone(true);
         Order savedOrder = orderRepository.save(order);
         if (publishNotification) {
             publishOrderDecisionNotification(savedOrder, approverId, OrderStatus.DECLINED);
@@ -356,7 +395,8 @@ public class OrderCreationServiceImpl implements OrderCreationService {
     private void ensurePortfolioOwnership(Long userId, Long listingId, Integer requestedQuantity) {
         Portfolio portfolio = portfolioRepository.findByUserIdAndListingId(userId, listingId)
                 .orElseThrow(() -> new ResourceNotFoundException("Portfolio position not found"));
-        if (portfolio.getQuantity() < requestedQuantity) {
+        int availableQuantity = portfolio.getQuantity() - defaultInteger(portfolio.getReservedQuantity());
+        if (availableQuantity < requestedQuantity) {
             throw new BusinessConflictException("Insufficient portfolio quantity");
         }
     }
@@ -389,21 +429,26 @@ public class OrderCreationServiceImpl implements OrderCreationService {
         };
     }
 
-    private OrderStatus determineOrderStatus(Long userId, BigDecimal approximatePrice, String currency) {
-        ActuaryInfo actuaryInfo = actuaryInfoRepository.findByEmployeeId(userId).orElse(null);
+    private ApprovalReservationDecision determineOrderStatusAndReserveExposure(Long userId, BigDecimal approximatePrice, String currency) {
+        ActuaryInfo actuaryInfo = actuaryInfoRepository.findByEmployeeIdForUpdate(userId).orElse(null);
         if (actuaryInfo == null) {
-            return OrderStatus.APPROVED;
+            return new ApprovalReservationDecision(OrderStatus.APPROVED, BigDecimal.ZERO);
         }
 
-        BigDecimal orderAmountInLimitCurrency = convertAmount(currency, LIMIT_CURRENCY, approximatePrice);
+        BigDecimal orderAmountInLimitCurrency = convertAmountWithoutCommission(currency, LIMIT_CURRENCY, approximatePrice);
         BigDecimal limit = actuaryInfo.getLimit();
         BigDecimal usedLimit = actuaryInfo.getUsedLimit() == null ? BigDecimal.ZERO : actuaryInfo.getUsedLimit();
-        boolean exhausted = limit != null && usedLimit.compareTo(limit) >= 0;
-        boolean exceeds = limit != null && usedLimit.add(orderAmountInLimitCurrency).compareTo(limit) > 0;
-        if (Boolean.TRUE.equals(actuaryInfo.getNeedApproval()) || exhausted || exceeds) {
-            return OrderStatus.PENDING;
+        BigDecimal reservedLimit = actuaryInfo.getReservedLimit() == null ? BigDecimal.ZERO : actuaryInfo.getReservedLimit();
+        boolean exhausted = limit != null && usedLimit.add(reservedLimit).compareTo(limit) >= 0;
+        boolean exceeds = limit != null && usedLimit.add(reservedLimit).add(orderAmountInLimitCurrency).compareTo(limit) > 0;
+        if (limit != null) {
+            actuaryInfo.setReservedLimit(reservedLimit.add(orderAmountInLimitCurrency));
+            actuaryInfoRepository.save(actuaryInfo);
         }
-        return OrderStatus.APPROVED;
+        OrderStatus status = Boolean.TRUE.equals(actuaryInfo.getNeedApproval()) || exhausted || exceeds
+                ? OrderStatus.PENDING
+                : OrderStatus.APPROVED;
+        return new ApprovalReservationDecision(status, limit == null ? BigDecimal.ZERO : orderAmountInLimitCurrency);
     }
 
     private void checkMarginRequirements(AuthenticatedUser user, Long fundingAccountId, StockListingDto listing, Integer quantity) {
@@ -471,19 +516,23 @@ public class OrderCreationServiceImpl implements OrderCreationService {
         return orderType == OrderType.STOP_LIMIT ? OrderType.LIMIT : orderType;
     }
 
-    private void transferFee(Long accountId, BigDecimal fee, String currency) {
+    private void transferFee(AuthenticatedUser user, Long fundingAccountId, BigDecimal fee, String currency) {
         BankAccountDto bankAccount = employeeClient.getBankAccount(currency);
+        if (user.isClient()) {
+            transferWithConversionIfNeeded(fundingAccountId, bankAccount.getAccountId(), fee, currency, true, "Order fee");
+            return;
+        }
+        if (fundingAccountId != null && fundingAccountId.equals(bankAccount.getAccountId())) {
+            return;
+        }
+
         AccountTransactionRequest transferRequest = new AccountTransactionRequest();
-        transferRequest.setFromAccountId(accountId);
+        transferRequest.setFromAccountId(fundingAccountId);
         transferRequest.setToAccountId(bankAccount.getAccountId());
         transferRequest.setAmount(fee);
         transferRequest.setCurrency(currency);
         transferRequest.setDescription("Order fee");
         accountClient.transfer(transferRequest);
-    }
-
-    private boolean isAfterHoursOrClosed(ExchangeStatusDto exchangeStatus) {
-        return exchangeStatus.isAfterHours() || Boolean.TRUE.equals(exchangeStatus.getClosed());
     }
 
     private boolean hasPastSettlementDate(StockListingDto listing) {
@@ -492,7 +541,28 @@ public class OrderCreationServiceImpl implements OrderCreationService {
     }
 
     private Long determineFundingAccountId(Long userId, Long selectedAccountId, String currency) {
+        if (actuaryInfoRepository.findByEmployeeId(userId).isPresent()) {
+            return employeeClient.getBankAccount(currency).getAccountId();
+        }
+        try {
+            EmployeeDto employee = employeeClient.getEmployee(userId);
+            if (employee != null) {
+                return employeeClient.getBankAccount(currency).getAccountId();
+            }
+        } catch (RuntimeException ignored) {
+            // Non-employee users are expected to fund orders from their selected account.
+        }
         return selectedAccountId;
+    }
+
+    private Long initialBuyAccountId(AuthenticatedUser user, Long selectedAccountId, String currency) {
+        if (user.isClient()) {
+            if (selectedAccountId == null) {
+                throw new BadRequestException("Account is required for client buy orders");
+            }
+            return selectedAccountId;
+        }
+        return determineFundingAccountId(user.userId(), selectedAccountId, currency);
     }
 
     private BigDecimal convertAmount(String fromCurrency, String toCurrency, BigDecimal amount) {
@@ -503,6 +573,17 @@ public class OrderCreationServiceImpl implements OrderCreationService {
             return amount;
         }
         ExchangeRateDto conversion = exchangeClient.calculate(fromCurrency, toCurrency, amount);
+        return conversion.getConvertedAmount() == null ? amount : conversion.getConvertedAmount();
+    }
+
+    private BigDecimal convertAmountWithoutCommission(String fromCurrency, String toCurrency, BigDecimal amount) {
+        if (amount == null) {
+            return BigDecimal.ZERO;
+        }
+        if (fromCurrency == null || toCurrency == null || fromCurrency.equalsIgnoreCase(toCurrency)) {
+            return amount;
+        }
+        ExchangeRateDto conversion = exchangeClient.calculateWithoutCommission(fromCurrency, toCurrency, amount);
         return conversion.getConvertedAmount() == null ? amount : conversion.getConvertedAmount();
     }
 
@@ -579,7 +660,7 @@ public class OrderCreationServiceImpl implements OrderCreationService {
         orderNotificationProducer.sendOrderDeclined(payload);
     }
 
-    private OrderResponse mapToResponse(Order order, BigDecimal approximatePrice, BigDecimal fee) {
+    private OrderResponse mapToResponse(Order order, BigDecimal approximatePrice, BigDecimal fee, Boolean exchangeClosed) {
         OrderResponse response = new OrderResponse();
         response.setId(order.getId());
         response.setUserId(order.getUserId());
@@ -597,11 +678,131 @@ public class OrderCreationServiceImpl implements OrderCreationService {
         response.setLastModification(order.getLastModification());
         response.setRemainingPortions(order.getRemainingPortions());
         response.setAfterHours(order.getAfterHours());
+        response.setExchangeClosed(exchangeClosed);
         response.setAllOrNone(order.getAllOrNone());
         response.setMargin(order.getMargin());
         response.setAccountId(order.getAccountId());
         response.setApproximatePrice(approximatePrice);
         response.setFee(fee);
         return response;
+    }
+
+    private void validateTradingAccess(AuthenticatedUser user, StockListingDto listing) {
+        if (!user.isClient()) {
+            return;
+        }
+        if (!user.hasTradingPermission()) {
+            throw new ForbiddenOperationException("Client does not have trading permission");
+        }
+        ListingType listingType = listing.getListingType() == null ? ListingType.STOCK : listing.getListingType();
+        if (listingType != ListingType.STOCK && listingType != ListingType.FUTURES) {
+            throw new ForbiddenOperationException("Clients can trade only stocks and futures");
+        }
+    }
+
+    private ExchangeWindow resolveExchangeWindow(StockListingDto listing) {
+        ExchangeStatusDto exchangeStatus = stockClient.getExchangeStatus(listing.getExchangeId());
+        boolean closed = Boolean.TRUE.equals(exchangeStatus.getClosed()) || Boolean.FALSE.equals(exchangeStatus.getOpen());
+        boolean afterHours = exchangeStatus.isAfterHours();
+        return new ExchangeWindow(closed, afterHours);
+    }
+
+    private void reserveSellQuantityIfNeeded(Order order) {
+        if (order.getDirection() != OrderDirection.SELL) {
+            return;
+        }
+        Portfolio portfolio = portfolioRepository.findByUserIdAndListingIdForUpdate(order.getUserId(), order.getListingId())
+                .orElseThrow(() -> new ResourceNotFoundException("Portfolio position not found"));
+        int availableQuantity = portfolio.getQuantity() - defaultInteger(portfolio.getReservedQuantity());
+        if (availableQuantity < order.getRemainingPortions()) {
+            throw new BusinessConflictException("Insufficient portfolio quantity");
+        }
+        portfolio.setReservedQuantity(defaultInteger(portfolio.getReservedQuantity()) + order.getRemainingPortions());
+        portfolioRepository.save(portfolio);
+    }
+
+    private void releaseReservedState(Order order, int quantityToRelease) {
+        releaseSellReservation(order, quantityToRelease);
+        releaseAgentExposure(order, quantityToRelease);
+    }
+
+    private void releaseSellReservation(Order order, int quantityToRelease) {
+        if (order.getDirection() != OrderDirection.SELL || quantityToRelease <= 0) {
+            return;
+        }
+        Portfolio portfolio = portfolioRepository.findByUserIdAndListingIdForUpdate(order.getUserId(), order.getListingId()).orElse(null);
+        if (portfolio == null) {
+            return;
+        }
+        int newReserved = Math.max(0, defaultInteger(portfolio.getReservedQuantity()) - quantityToRelease);
+        portfolio.setReservedQuantity(newReserved);
+        portfolioRepository.save(portfolio);
+    }
+
+    private void releaseAgentExposure(Order order, int quantityToRelease) {
+        if (quantityToRelease <= 0 || order.getReservedLimitExposure() == null || order.getReservedLimitExposure().compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+        ActuaryInfo actuaryInfo = actuaryInfoRepository.findByEmployeeIdForUpdate(order.getUserId()).orElse(null);
+        if (actuaryInfo == null || order.getQuantity() == null || order.getQuantity() <= 0) {
+            order.setReservedLimitExposure(BigDecimal.ZERO);
+            return;
+        }
+
+        BigDecimal releasable = order.getReservedLimitExposure()
+                .multiply(BigDecimal.valueOf(quantityToRelease))
+                .divide(BigDecimal.valueOf(order.getRemainingPortions()), 4, RoundingMode.HALF_UP)
+                .min(order.getReservedLimitExposure());
+
+        BigDecimal currentReserved = actuaryInfo.getReservedLimit() == null ? BigDecimal.ZERO : actuaryInfo.getReservedLimit();
+        actuaryInfo.setReservedLimit(currentReserved.subtract(releasable).max(BigDecimal.ZERO));
+        actuaryInfoRepository.save(actuaryInfo);
+        order.setReservedLimitExposure(order.getReservedLimitExposure().subtract(releasable).max(BigDecimal.ZERO));
+    }
+
+    private void transferWithConversionIfNeeded(Long fromAccountId, Long toAccountId, BigDecimal targetAmount, String targetCurrency,
+                                                boolean applyConversionFee, String description) {
+        AccountDetailsDto fromAccount = accountClient.getAccountDetails(fromAccountId);
+        AccountDetailsDto toAccount = accountClient.getAccountDetails(toAccountId);
+        if (fromAccount.getCurrency() == null || fromAccount.getCurrency().equalsIgnoreCase(targetCurrency)) {
+            AccountTransactionRequest transferRequest = new AccountTransactionRequest();
+            transferRequest.setFromAccountId(fromAccountId);
+            transferRequest.setToAccountId(toAccountId);
+            transferRequest.setAmount(targetAmount);
+            transferRequest.setCurrency(targetCurrency);
+            transferRequest.setDescription(description);
+            accountClient.transfer(transferRequest);
+            return;
+        }
+
+        ExchangeRateDto conversion = applyConversionFee
+                ? exchangeClient.calculate(fromAccount.getCurrency(), targetCurrency, targetAmount)
+                : exchangeClient.calculateWithoutCommission(fromAccount.getCurrency(), targetCurrency, targetAmount);
+
+        PaymentDto payment = new PaymentDto(
+                fromAccount.getAccountNumber(),
+                toAccount.getAccountNumber(),
+                targetAmount,
+                conversion.getConvertedAmount() == null ? targetAmount : conversion.getConvertedAmount(),
+                applyConversionFee && conversion.getCommission() != null ? conversion.getCommission() : BigDecimal.ZERO,
+                fromAccount.getOwnerId()
+        );
+        accountClient.transaction(payment);
+    }
+
+    private AuthenticatedUser resolveAuthenticatedActor(Long userId) {
+        return actuaryInfoRepository.findByEmployeeId(userId).isPresent()
+                ? new AuthenticatedUser(userId, Set.of("AGENT"), Set.of())
+                : new AuthenticatedUser(userId, Set.of("CLIENT_TRADING"), Set.of("TRADING"));
+    }
+
+    private int defaultInteger(Integer value) {
+        return value == null ? 0 : value;
+    }
+
+    private record ApprovalReservationDecision(OrderStatus status, BigDecimal reservedExposure) {
+    }
+
+    private record ExchangeWindow(boolean closed, boolean afterHours) {
     }
 }

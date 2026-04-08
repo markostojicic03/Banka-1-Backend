@@ -102,6 +102,7 @@ public class ActuaryServiceImpl implements ActuaryService {
                 .orElseGet(() -> createDefaultActuaryInfo(employeeId));
 
         info.setUsedLimit(BigDecimal.ZERO);
+        info.setReservedLimit(BigDecimal.ZERO);
         actuaryInfoRepository.save(info);
     }
 
@@ -111,10 +112,11 @@ public class ActuaryServiceImpl implements ActuaryService {
     @Override
     @Transactional
     public void resetAllLimits() {
-        log.info("Resetting usedLimit for all actuary records.");
+        log.info("Resetting limit consumption state for all actuary records.");
         List<ActuaryInfo> all = actuaryInfoRepository.findAll();
         for (ActuaryInfo info : all) {
             info.setUsedLimit(BigDecimal.ZERO);
+            info.setReservedLimit(BigDecimal.ZERO);
         }
         actuaryInfoRepository.saveAll(all);
     }
@@ -130,6 +132,7 @@ public class ActuaryServiceImpl implements ActuaryService {
         ActuaryInfo info = new ActuaryInfo();
         info.setEmployeeId(employeeId);
         info.setUsedLimit(BigDecimal.ZERO);
+        info.setReservedLimit(BigDecimal.ZERO);
         info.setNeedApproval(false);
         return actuaryInfoRepository.save(info);
     }

@@ -89,6 +89,10 @@ public class Order {
     @Column(nullable = false)
     private Boolean afterHours;
 
+    /** True if the exchange was closed when the order was last validated/confirmed. */
+    @Column(nullable = false)
+    private Boolean exchangeClosed = false;
+
     /** If true, the order must be filled completely or not at all (All-or-None). */
     @Column(nullable = false)
     private Boolean allOrNone;
@@ -100,6 +104,10 @@ public class Order {
     /** ID of the bank account from which funds will be debited or credited. */
     @Column(nullable = false)
     private Long accountId;
+
+    /** Commission-free RSD exposure reserved for pending/approved agent orders. */
+    @Column(nullable = false, precision = 19, scale = 4)
+    private BigDecimal reservedLimitExposure = BigDecimal.ZERO;
 
     /** Updates the lastModification timestamp on every persist and update. */
     @PrePersist

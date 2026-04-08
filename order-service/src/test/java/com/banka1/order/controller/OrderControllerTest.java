@@ -2,6 +2,7 @@ package com.banka1.order.controller;
 
 import com.banka1.order.dto.OrderOverviewResponse;
 import com.banka1.order.dto.OrderResponse;
+import com.banka1.order.dto.PartialCancelOrderRequest;
 import com.banka1.order.entity.enums.OrderOverviewStatusFilter;
 import com.banka1.order.service.OrderCreationService;
 import jakarta.validation.Valid;
@@ -62,8 +63,8 @@ class OrderControllerTest {
         assertPutMapping("declineOrder", "/{id}/decline");
         assertPreAuthorize("declineOrder", "hasRole('SUPERVISOR')");
 
-        assertPutMapping("cancelOrder", "/{id}/cancel", Long.class);
-        assertPreAuthorize("cancelOrder", "hasRole('SUPERVISOR')", Long.class);
+        assertPutMapping("cancelOrder", "/{id}/cancel", Long.class, PartialCancelOrderRequest.class);
+        assertPreAuthorize("cancelOrder", "hasRole('SUPERVISOR')", Long.class, PartialCancelOrderRequest.class);
     }
 
     @Test
@@ -74,7 +75,7 @@ class OrderControllerTest {
 
         assertThat(mapping).isNotNull();
         assertThat(mapping.value()).containsExactly("/{id}/cancel");
-        assertThat(preAuthorize.value()).isEqualTo("hasRole('CLIENT') or hasRole('AGENT')");
+        assertThat(preAuthorize.value()).isEqualTo("hasAnyRole('CLIENT_TRADING','AGENT','SUPERVISOR')");
     }
 
     @Test
@@ -82,10 +83,15 @@ class OrderControllerTest {
         Method createBuyOrder = OrderController.class.getDeclaredMethod("createBuyOrder", Jwt.class, com.banka1.order.dto.CreateBuyOrderRequest.class);
         assertThat(createBuyOrder.getParameters()[1].getAnnotation(Valid.class)).isNotNull();
         assertThat(createBuyOrder.getParameters()[1].getAnnotation(RequestBody.class)).isNotNull();
+        assertThat(createBuyOrder.getAnnotation(PreAuthorize.class).value()).isEqualTo("hasAnyRole('CLIENT_TRADING','AGENT','SUPERVISOR')");
 
         Method createSellOrder = OrderController.class.getDeclaredMethod("createSellOrder", Jwt.class, com.banka1.order.dto.CreateSellOrderRequest.class);
         assertThat(createSellOrder.getParameters()[1].getAnnotation(Valid.class)).isNotNull();
         assertThat(createSellOrder.getParameters()[1].getAnnotation(RequestBody.class)).isNotNull();
+        assertThat(createSellOrder.getAnnotation(PreAuthorize.class).value()).isEqualTo("hasAnyRole('CLIENT_TRADING','AGENT','SUPERVISOR')");
+
+        Method confirmOrder = OrderController.class.getDeclaredMethod("confirmOrder", Jwt.class, Long.class);
+        assertThat(confirmOrder.getAnnotation(PreAuthorize.class).value()).isEqualTo("hasAnyRole('CLIENT_TRADING','AGENT','SUPERVISOR')");
     }
 
     private void assertGetMapping(String methodName) throws Exception {

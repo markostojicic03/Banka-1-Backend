@@ -5,6 +5,7 @@ import com.banka1.order.dto.CreateBuyOrderRequest;
 import com.banka1.order.dto.CreateSellOrderRequest;
 import com.banka1.order.dto.OrderOverviewResponse;
 import com.banka1.order.dto.OrderResponse;
+import com.banka1.order.dto.PartialCancelOrderRequest;
 import com.banka1.order.entity.enums.OrderOverviewStatusFilter;
 import com.banka1.order.service.OrderCreationService;
 import jakarta.validation.Valid;
@@ -38,7 +39,7 @@ public class OrderController {
      * @return the created order response
      */
     @PostMapping("/buy")
-    @PreAuthorize("hasRole('CLIENT') or hasRole('AGENT')")
+    @PreAuthorize("hasAnyRole('CLIENT_TRADING','AGENT','SUPERVISOR')")
     public ResponseEntity<OrderResponse> createBuyOrder(@AuthenticationPrincipal Jwt jwt,
                                                         @Valid @RequestBody CreateBuyOrderRequest request) {
         OrderResponse response = orderCreationService.createBuyOrder(toAuthenticatedUser(jwt), request);
@@ -53,7 +54,7 @@ public class OrderController {
      * @return the created order response
      */
     @PostMapping("/sell")
-    @PreAuthorize("hasRole('CLIENT') or hasRole('AGENT')")
+    @PreAuthorize("hasAnyRole('CLIENT_TRADING','AGENT','SUPERVISOR')")
     public ResponseEntity<OrderResponse> createSellOrder(@AuthenticationPrincipal Jwt jwt,
                                                          @Valid @RequestBody CreateSellOrderRequest request) {
         OrderResponse response = orderCreationService.createSellOrder(toAuthenticatedUser(jwt), request);
@@ -69,21 +70,24 @@ public class OrderController {
     }
 
     @PostMapping("/{id}/confirm")
-    @PreAuthorize("hasRole('CLIENT') or hasRole('AGENT')")
+    @PreAuthorize("hasAnyRole('CLIENT_TRADING','AGENT','SUPERVISOR')")
     public ResponseEntity<OrderResponse> confirmOrder(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {
         return ResponseEntity.ok(orderCreationService.confirmOrder(toAuthenticatedUser(jwt), id));
     }
 
     @PostMapping("/{id}/cancel")
-    @PreAuthorize("hasRole('CLIENT') or hasRole('AGENT')")
+    @PreAuthorize("hasAnyRole('CLIENT_TRADING','AGENT','SUPERVISOR')")
     public ResponseEntity<OrderResponse> cancelOrder(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {
         return ResponseEntity.ok(orderCreationService.cancelOrder(toAuthenticatedUser(jwt), id));
     }
 
     @PutMapping("/{id}/cancel")
     @PreAuthorize("hasRole('SUPERVISOR')")
-    public ResponseEntity<OrderResponse> cancelOrder(@PathVariable Long id) {
-        return ResponseEntity.ok(orderCreationService.cancelOrder(id));
+    public ResponseEntity<OrderResponse> cancelOrder(
+            @PathVariable Long id,
+            @RequestBody(required = false) PartialCancelOrderRequest request
+    ) {
+        return ResponseEntity.ok(orderCreationService.cancelOrder(id, request == null ? null : request.getQuantity()));
     }
 
     @PutMapping("/{id}/approve")

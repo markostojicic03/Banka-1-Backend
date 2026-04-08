@@ -4,6 +4,7 @@ import com.banka1.order.client.AccountClient;
 import com.banka1.order.client.EmployeeClient;
 import com.banka1.order.client.ExchangeClient;
 import com.banka1.order.client.StockClient;
+import com.banka1.order.dto.AccountDetailsDto;
 import com.banka1.order.dto.AccountTransactionRequest;
 import com.banka1.order.dto.BankAccountDto;
 import com.banka1.order.dto.ExchangeRateDto;
@@ -82,6 +83,7 @@ class OrderExecutionServiceTest {
     private BankAccountDto bankAccount;
     private Portfolio portfolio;
     private ActuaryInfo actuaryInfo;
+    private AccountDetailsDto accountDetails;
 
     @BeforeEach
     void setUp() {
@@ -99,6 +101,7 @@ class OrderExecutionServiceTest {
         order.setAfterHours(false);
         order.setAllOrNone(false);
         order.setAccountId(5L);
+        order.setReservedLimitExposure(new BigDecimal("23634.00"));
 
         listing = new StockListingDto();
         listing.setId(42L);
@@ -119,12 +122,19 @@ class OrderExecutionServiceTest {
         portfolio.setListingId(42L);
         portfolio.setListingType(ListingType.STOCK);
         portfolio.setQuantity(5);
+        portfolio.setReservedQuantity(1);
         portfolio.setAveragePurchasePrice(new BigDecimal("95.00"));
 
         actuaryInfo = new ActuaryInfo();
         actuaryInfo.setEmployeeId(1L);
         actuaryInfo.setUsedLimit(BigDecimal.ZERO);
         actuaryInfo.setLimit(new BigDecimal("100000.00"));
+        actuaryInfo.setReservedLimit(new BigDecimal("23634.00"));
+
+        accountDetails = new AccountDetailsDto();
+        accountDetails.setAccountNumber("ACC-1");
+        accountDetails.setCurrency("USD");
+        accountDetails.setOwnerId(1L);
 
         ExchangeRateDto usdToRsd = new ExchangeRateDto();
         usdToRsd.setConvertedAmount(new BigDecimal("23634.00"));
@@ -135,18 +145,22 @@ class OrderExecutionServiceTest {
 
         lenient().when(stockClient.getListing(42L)).thenReturn(listing);
         lenient().when(employeeClient.getBankAccount("USD")).thenReturn(bankAccount);
-        lenient().when(portfolioRepository.findByUserIdAndListingId(1L, 42L)).thenReturn(Optional.of(portfolio));
+        lenient().when(portfolioRepository.findByUserIdAndListingIdForUpdate(1L, 42L)).thenReturn(Optional.of(portfolio));
         lenient().when(orderRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(order));
         lenient().when(transactionRepository.save(any(Transaction.class))).thenAnswer(invocation -> invocation.getArgument(0));
         lenient().when(portfolioRepository.save(any(Portfolio.class))).thenAnswer(invocation -> invocation.getArgument(0));
         lenient().when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
         lenient().doNothing().when(accountClient).transfer(any(AccountTransactionRequest.class));
+        lenient().when(accountClient.getAccountDetails(5L)).thenReturn(accountDetails);
+        lenient().when(accountClient.getAccountDetails(999L)).thenReturn(accountDetails);
         lenient().when(exchangeClient.calculate("USD", "RSD", new BigDecimal("202.00"))).thenReturn(usdToRsd);
+        lenient().when(exchangeClient.calculateWithoutCommission("USD", "RSD", new BigDecimal("202.00"))).thenReturn(usdToRsd);
         lenient().when(exchangeClient.calculate("USD", "USD", new BigDecimal("7"))).thenReturn(usdCap);
         lenient().when(exchangeClient.calculate("USD", "USD", new BigDecimal("12"))).thenReturn(limitCap);
         lenient().when(orderExecutionTaskScheduler.schedule(any(Runnable.class), any(Instant.class)))
                 .thenReturn(mock(ScheduledFuture.class));
         lenient().when(selfProvider.getObject()).thenReturn(self);
+        lenient().when(actuaryInfoRepository.findByEmployeeIdForUpdate(1L)).thenReturn(Optional.empty());
     }
 
     @Test
@@ -178,7 +192,7 @@ class OrderExecutionServiceTest {
 
     @Test
     void marketBuy_executesUsingAskPriceTransfersFundsAndCompletesOrder() {
-        when(portfolioRepository.findByUserIdAndListingId(1L, 42L)).thenReturn(Optional.empty());
+        when(portfolioRepository.findByUserIdAndListingIdForUpdate(1L, 42L)).thenReturn(Optional.empty());
 
         service.executeOrderPortion(order);
 
@@ -243,7 +257,7 @@ class OrderExecutionServiceTest {
         lockedOrder.setAccountId(5L);
 
         when(orderRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(lockedOrder));
-        when(portfolioRepository.findByUserIdAndListingId(1L, 42L)).thenReturn(Optional.empty());
+        when(portfolioRepository.findByUserIdAndListingIdForUpdate(1L, 42L)).thenReturn(Optional.empty());
 
         service.executeOrderPortion(staleOrder);
 
@@ -290,6 +304,17 @@ class OrderExecutionServiceTest {
     }
 
     @Test
+    void stopBuy_doesNotTriggerWhenAskEqualsStop() {
+        order.setOrderType(OrderType.STOP);
+        order.setStopValue(new BigDecimal("101.00"));
+
+        service.executeOrderPortion(order);
+
+        assertThat(order.getOrderType()).isEqualTo(OrderType.STOP);
+        verify(transactionRepository, never()).save(any(Transaction.class));
+    }
+
+    @Test
     void stopLimitSell_activatesThenBehavesAsLimitSell() {
         order.setDirection(OrderDirection.SELL);
         order.setOrderType(OrderType.STOP_LIMIT);
@@ -331,7 +356,7 @@ class OrderExecutionServiceTest {
 
     @Test
     void buyExecution_persistsNewPortfolioWhenPositionDoesNotExist() {
-        when(portfolioRepository.findByUserIdAndListingId(1L, 42L)).thenReturn(Optional.empty());
+        when(portfolioRepository.findByUserIdAndListingIdForUpdate(1L, 42L)).thenReturn(Optional.empty());
 
         service.executeOrderPortion(order);
 
@@ -358,6 +383,7 @@ class OrderExecutionServiceTest {
     @Test
     void actuaryExecution_updatesUsedLimitWithCurrencyConversion() {
         when(actuaryInfoRepository.findByEmployeeId(1L)).thenReturn(Optional.of(actuaryInfo));
+        when(actuaryInfoRepository.findByEmployeeIdForUpdate(1L)).thenReturn(Optional.of(actuaryInfo));
 
         service.executeOrderPortion(order);
 
@@ -366,16 +392,13 @@ class OrderExecutionServiceTest {
     }
 
     @Test
-    void actuaryBuy_usesDistinctTransferAccounts() {
+    void actuaryBuy_isBankFundedWithoutUserTransfer() {
         when(actuaryInfoRepository.findByEmployeeId(1L)).thenReturn(Optional.of(actuaryInfo));
+        when(actuaryInfoRepository.findByEmployeeIdForUpdate(1L)).thenReturn(Optional.of(actuaryInfo));
 
         service.executeOrderPortion(order);
 
-        ArgumentCaptor<AccountTransactionRequest> captor = ArgumentCaptor.forClass(AccountTransactionRequest.class);
-        verify(accountClient).transfer(captor.capture());
-        assertThat(captor.getValue().getFromAccountId()).isEqualTo(999L);
-        assertThat(captor.getValue().getToAccountId()).isEqualTo(5L);
-        assertThat(captor.getValue().getFromAccountId()).isNotEqualTo(captor.getValue().getToAccountId());
+        verify(accountClient, never()).transfer(any(AccountTransactionRequest.class));
     }
 
     @Test

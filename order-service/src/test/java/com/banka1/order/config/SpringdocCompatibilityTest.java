@@ -12,14 +12,11 @@ import java.net.http.HttpResponse;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(properties = {
+        "spring.profiles.active=local",
+        "server.port=0",
         "jwt.secret=01234567890123456789012345678901",
-        "spring.main.allow-bean-definition-overriding=true",
         "spring.liquibase.enabled=false",
         "spring.jpa.hibernate.ddl-auto=create-drop",
-        "spring.datasource.url=jdbc:h2:mem:orderdocstest;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
-        "spring.datasource.driver-class-name=org.h2.Driver",
-        "spring.datasource.username=sa",
-        "spring.datasource.password=",
         "services.account.url=http://localhost:18084",
         "services.employee.url=http://localhost:18081",
         "services.client.url=http://localhost:18083",

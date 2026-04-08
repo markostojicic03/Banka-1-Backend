@@ -29,6 +29,7 @@ public class OrderResponse {
     private LocalDateTime lastModification;
     private Integer remainingPortions;
     private Boolean afterHours;
+    private Boolean exchangeClosed;
     private Boolean allOrNone;
     private Boolean margin;
     private Long accountId;

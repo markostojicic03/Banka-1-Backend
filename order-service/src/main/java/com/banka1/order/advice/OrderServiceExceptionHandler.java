@@ -21,7 +21,7 @@ import java.util.Map;
  * Global REST exception handler for order-service.
  */
 @RestControllerAdvice
-public class GlobalExceptionHandler {
+public class OrderServiceExceptionHandler {
 
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiErrorResponse> handleNotFound(ResourceNotFoundException ex, HttpServletRequest request) {

@@ -43,6 +43,10 @@ public class Portfolio {
     @Column(nullable = false)
     private Integer quantity;
 
+    /** Units reserved by confirmed sell orders and unavailable for new sell reservations. */
+    @Column(nullable = false)
+    private Integer reservedQuantity = 0;
+
     /** Weighted average price at which units were purchased, in RSD. */
     @Column(name = "average_purchase_price", nullable = false, precision = 19, scale = 4)
     private BigDecimal averagePurchasePrice;

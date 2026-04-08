@@ -57,6 +57,7 @@ class ActuaryServiceTest {
         actuaryInfo.setEmployeeId(1L);
         actuaryInfo.setLimit(new BigDecimal("100000.00"));
         actuaryInfo.setUsedLimit(new BigDecimal("15000.00"));
+        actuaryInfo.setReservedLimit(new BigDecimal("8000.00"));
         actuaryInfo.setNeedApproval(false);
     }
 
@@ -176,6 +177,7 @@ class ActuaryServiceTest {
         actuaryService.resetLimit(1L);
 
         assertThat(actuaryInfo.getUsedLimit()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(actuaryInfo.getReservedLimit()).isEqualByComparingTo(BigDecimal.ZERO);
         verify(actuaryInfoRepository).save(actuaryInfo);
     }
 
@@ -191,16 +193,20 @@ class ActuaryServiceTest {
     void resetAllLimits_resetsEveryRecord() {
         ActuaryInfo info1 = new ActuaryInfo();
         info1.setUsedLimit(new BigDecimal("5000.00"));
+        info1.setReservedLimit(new BigDecimal("1200.00"));
 
         ActuaryInfo info2 = new ActuaryInfo();
         info2.setUsedLimit(new BigDecimal("12000.00"));
+        info2.setReservedLimit(new BigDecimal("3400.00"));
 
         when(actuaryInfoRepository.findAll()).thenReturn(List.of(info1, info2));
 
         actuaryService.resetAllLimits();
 
         assertThat(info1.getUsedLimit()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(info1.getReservedLimit()).isEqualByComparingTo(BigDecimal.ZERO);
         assertThat(info2.getUsedLimit()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(info2.getReservedLimit()).isEqualByComparingTo(BigDecimal.ZERO);
         verify(actuaryInfoRepository).saveAll(List.of(info1, info2));
     }
 }
