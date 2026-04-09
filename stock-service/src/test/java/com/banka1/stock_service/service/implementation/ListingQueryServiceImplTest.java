@@ -23,6 +23,7 @@ import com.banka1.stock_service.repository.StockExchangeRepository;
 import com.banka1.stock_service.repository.StockRepository;
 import com.banka1.stock_service.repository.StockOptionRepository;
 import com.banka1.stock_service.service.ListingQueryService;
+import com.banka1.stock_service.service.StockTickerSeedService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -52,6 +53,9 @@ class ListingQueryServiceImplTest {
 
     @Autowired
     private ListingQueryService listingQueryService;
+
+    @Autowired
+    private StockTickerSeedService stockTickerSeedService;
 
     @Autowired
     private StockExchangeRepository stockExchangeRepository;
@@ -323,6 +327,51 @@ class ListingQueryServiceImplTest {
         assertThat(response.forexDetails().contractSize()).isEqualTo(1_000);
         assertThat(response.initialMarginCost()).isEqualByComparingTo("119.1850000000");
         assertThat(response.priceHistory()).hasSize(1);
+    }
+
+    @Test
+    void getListingDetailsReturnsNullChangePercentForSeededStockBeforeRefresh() {
+        saveExchange("Nasdaq", "NASDAQ", "XNAS");
+
+        stockTickerSeedService.seedDefaultTickers();
+
+        Stock apple = stockRepository.findByTicker("AAPL").orElseThrow();
+        Listing seededListing = listingRepository.findByListingTypeAndSecurityId(ListingType.STOCK, apple.getId())
+                .orElseThrow();
+
+        ListingDetailsResponse response = listingQueryService.getListingDetails(seededListing.getId(), ListingDetailsPeriod.DAY);
+
+        assertThat(response.listingId()).isEqualTo(seededListing.getId());
+        assertThat(response.ticker()).isEqualTo("AAPL");
+        assertThat(response.price()).isEqualByComparingTo("0.00000000");
+        assertThat(response.change()).isEqualByComparingTo("0.00000000");
+        assertThat(response.changePercent()).isNull();
+        assertThat(response.dollarVolume()).isEqualByComparingTo("0E-8");
+        assertThat(response.priceHistory()).isEmpty();
+    }
+
+    @Test
+    void getListingDetailsReturnsNullChangePercentForHistoryRowsWithoutPreviousPrice() {
+        StockExchange xnas = saveExchange("Nasdaq", "NASDAQ", "XNAS");
+        Listing listing = saveStockListing(
+                xnas,
+                "AAPL",
+                "Apple Inc.",
+                "0.00000000",
+                "0.00000000",
+                "0.00000000",
+                "0.00000000",
+                0L
+        );
+
+        saveDailyPriceInfo(listing, LocalDate.of(2026, 4, 8), "0.00000000", "0.00000000", "0.00000000", "0.00000000", 0L);
+
+        ListingDetailsResponse response = listingQueryService.getListingDetails(listing.getId(), ListingDetailsPeriod.DAY);
+
+        assertThat(response.changePercent()).isNull();
+        assertThat(response.priceHistory()).hasSize(1);
+        assertThat(response.priceHistory().getFirst().changePercent()).isNull();
+        assertThat(response.priceHistory().getFirst().dollarVolume()).isEqualByComparingTo("0E-8");
     }
 
     /**

@@ -225,6 +225,8 @@ public class ForexPairApiImportService {
      *
      * <p>The current model stores every listing on one exchange, so the importer prefers
      * {@code XNAS} when present and otherwise falls back to the first available exchange.
+     * This is compatibility metadata required by the current schema, not a signal that should
+     * drive FX market-open checks or scheduler refresh decisions.
      *
      * @param exchangesByMic MIC-indexed stock exchanges
      * @return resolved exchange for FX listings

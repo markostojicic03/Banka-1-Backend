@@ -6,13 +6,16 @@ import com.banka1.stock_service.domain.ListingType;
 import com.banka1.stock_service.dto.ListingRefreshBatchResponse;
 import com.banka1.stock_service.dto.StockExchangeStatusResponse;
 import com.banka1.stock_service.repository.ListingRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Sort;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Clock;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,7 +24,9 @@ import java.util.Map;
  * Scheduled batch refresher for persisted listing snapshots.
  *
  * <p>The scheduler runs on a fixed configurable delay and refreshes only listings whose
- * exchange is currently open according to the existing stock-exchange status logic.
+ * market is currently considered open for their listing type. Stock listings follow the
+ * existing stock-exchange status logic, while FX listings use a separate weekday-only rule
+ * independent of their placeholder exchange metadata.
  *
  * <p>Unsupported listing types are skipped instead of failing the entire batch.
  * Individual provider failures are logged and counted, but the batch continues with
@@ -29,7 +34,6 @@ import java.util.Map;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class ListingMarketDataScheduler {
 
     private static final String SOURCE = "scheduled-listing-refresh";
@@ -38,6 +42,54 @@ public class ListingMarketDataScheduler {
     private final StockExchangeService stockExchangeService;
     private final ListingMarketDataRefreshService listingMarketDataRefreshService;
     private final ListingRefreshProperties listingRefreshProperties;
+    private final Clock clock;
+
+    /**
+     * Creates the production scheduler using the system UTC clock.
+     *
+     * @param listingRepository repository for persisted listings
+     * @param stockExchangeService service for stock-exchange runtime status
+     * @param listingMarketDataRefreshService listing refresh use case
+     * @param listingRefreshProperties scheduler configuration properties
+     */
+    @Autowired
+    public ListingMarketDataScheduler(
+            ListingRepository listingRepository,
+            StockExchangeService stockExchangeService,
+            ListingMarketDataRefreshService listingMarketDataRefreshService,
+            ListingRefreshProperties listingRefreshProperties
+    ) {
+        this(
+                listingRepository,
+                stockExchangeService,
+                listingMarketDataRefreshService,
+                listingRefreshProperties,
+                Clock.systemUTC()
+        );
+    }
+
+    /**
+     * Creates the scheduler with an explicit clock for deterministic tests.
+     *
+     * @param listingRepository repository for persisted listings
+     * @param stockExchangeService service for stock-exchange runtime status
+     * @param listingMarketDataRefreshService listing refresh use case
+     * @param listingRefreshProperties scheduler configuration properties
+     * @param clock time source used for FX refresh-window checks
+     */
+    ListingMarketDataScheduler(
+            ListingRepository listingRepository,
+            StockExchangeService stockExchangeService,
+            ListingMarketDataRefreshService listingMarketDataRefreshService,
+            ListingRefreshProperties listingRefreshProperties,
+            Clock clock
+    ) {
+        this.listingRepository = listingRepository;
+        this.stockExchangeService = stockExchangeService;
+        this.listingMarketDataRefreshService = listingMarketDataRefreshService;
+        this.listingRefreshProperties = listingRefreshProperties;
+        this.clock = clock;
+    }
 
     /**
      * Runs one scheduled refresh pass using the configured fixed delay.
@@ -71,6 +123,7 @@ public class ListingMarketDataScheduler {
     public ListingRefreshBatchResponse refreshOpenListings() {
         List<Listing> listings = listingRepository.findAll(Sort.by(Sort.Direction.ASC, "id"));
         Map<Long, Boolean> exchangeOpenById = new HashMap<>();
+        boolean forexMarketOpen = isForexMarketOpen();
 
         int refreshedCount = 0;
         int skippedClosedCount = 0;
@@ -78,10 +131,7 @@ public class ListingMarketDataScheduler {
         int failedCount = 0;
 
         for (Listing listing : listings) {
-            if (!exchangeOpenById.computeIfAbsent(
-                    listing.getStockExchange().getId(),
-                    this::isExchangeOpen
-            )) {
+            if (!isRefreshWindowOpen(listing, exchangeOpenById, forexMarketOpen)) {
                 skippedClosedCount++;
                 continue;
             }
@@ -116,6 +166,28 @@ public class ListingMarketDataScheduler {
     }
 
     /**
+     * Determines whether one listing should be refreshed right now based on its market type.
+     *
+     * @param listing listing under evaluation
+     * @param exchangeOpenById exchange-open cache for exchange-traded listings
+     * @param forexMarketOpen precomputed FX market-open flag for the current batch
+     * @return {@code true} when the listing should be refreshed now
+     */
+    private boolean isRefreshWindowOpen(
+            Listing listing,
+            Map<Long, Boolean> exchangeOpenById,
+            boolean forexMarketOpen
+    ) {
+        return switch (listing.getListingType()) {
+            case FOREX -> forexMarketOpen;
+            default -> exchangeOpenById.computeIfAbsent(
+                    listing.getStockExchange().getId(),
+                    this::isExchangeOpen
+            );
+        };
+    }
+
+    /**
      * Determines whether the exchange of one listing should be treated as open.
      *
      * @param stockExchangeId exchange identifier
@@ -124,6 +196,19 @@ public class ListingMarketDataScheduler {
     private boolean isExchangeOpen(Long stockExchangeId) {
         StockExchangeStatusResponse status = stockExchangeService.getStockExchangeStatus(stockExchangeId);
         return status.open();
+    }
+
+    /**
+     * Determines whether the scheduler should refresh FX listings at the current UTC date.
+     *
+     * <p>This intentionally decouples FX refresh behavior from placeholder stock-exchange metadata.
+     * The current approximation treats FX as open 24 hours on UTC weekdays and closed on weekends.
+     *
+     * @return {@code true} from Monday through Friday in UTC
+     */
+    private boolean isForexMarketOpen() {
+        DayOfWeek dayOfWeek = LocalDate.now(clock).getDayOfWeek();
+        return dayOfWeek != DayOfWeek.SATURDAY && dayOfWeek != DayOfWeek.SUNDAY;
     }
 
     /**

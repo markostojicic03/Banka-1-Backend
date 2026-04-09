@@ -397,7 +397,7 @@ public class ListingQueryServiceImpl implements ListingQueryService {
                 listing.getAsk(),
                 listing.getBid(),
                 listing.getChange(),
-                listing.calculateChangePercent(),
+                calculateChangePercentOrNull(listing),
                 listing.getVolume(),
                 listing.calculateDollarVolume(),
                 initialMarginCost,
@@ -594,10 +594,45 @@ public class ListingQueryServiceImpl implements ListingQueryService {
                 entity.getAsk(),
                 entity.getBid(),
                 entity.getChange(),
-                entity.calculateChangePercent(),
+                calculateChangePercentOrNull(entity),
                 entity.getVolume(),
                 entity.calculateDollarVolume()
         );
+    }
+
+    /**
+     * Returns {@code null} when a percentage change is undefined because there is no implied previous price.
+     *
+     * @param listing listing whose change percent is needed
+     * @return derived percentage change or {@code null} when undefined
+     */
+    private BigDecimal calculateChangePercentOrNull(Listing listing) {
+        return hasDefinedPreviousPrice(listing.getPrice(), listing.getChange())
+                ? listing.calculateChangePercent()
+                : null;
+    }
+
+    /**
+     * Returns {@code null} when a historical percentage change is undefined because there is no previous price.
+     *
+     * @param entity historical row whose change percent is needed
+     * @return derived percentage change or {@code null} when undefined
+     */
+    private BigDecimal calculateChangePercentOrNull(ListingDailyPriceInfo entity) {
+        return hasDefinedPreviousPrice(entity.getPrice(), entity.getChange())
+                ? entity.calculateChangePercent()
+                : null;
+    }
+
+    /**
+     * Checks whether {@code price - change} yields a non-zero implied previous price.
+     *
+     * @param currentPrice current or closing price
+     * @param priceChange absolute change from the previous price
+     * @return {@code true} when percentage change can be derived safely
+     */
+    private boolean hasDefinedPreviousPrice(BigDecimal currentPrice, BigDecimal priceChange) {
+        return currentPrice.subtract(priceChange).signum() != 0;
     }
 
     /**
