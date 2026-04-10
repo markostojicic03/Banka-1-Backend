@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
-  title: Account service API
-  description: API for accounts
+  title: Credit Service API
+  description: API for managing loans and loan requests
   version: "1.0"
 servers:
 - url: http://localhost:8089
@@ -13,6 +13,7 @@ paths:
     put:
       tags:
       - loan-controller
+      summary: Decline a loan request
       operationId: decline
       parameters:
       - name: id
@@ -32,6 +33,7 @@ paths:
     put:
       tags:
       - loan-controller
+      summary: Approve a loan request
       operationId: approve
       parameters:
       - name: id
@@ -51,6 +53,7 @@ paths:
     get:
       tags:
       - loan-controller
+      summary: Get all loan requests with optional filters
       operationId: findAllLoanRequest
       parameters:
       - name: vrstaKredita
@@ -90,6 +93,7 @@ paths:
     post:
       tags:
       - loan-controller
+      summary: Submit a new loan request
       operationId: requests
       requestBody:
         content:
@@ -108,6 +112,7 @@ paths:
     get:
       tags:
       - loan-controller
+      summary: Get loan details and installments by loan number
       operationId: info
       parameters:
       - name: loanNumber
@@ -127,6 +132,7 @@ paths:
     get:
       tags:
       - loan-controller
+      summary: Get loans for the authenticated client
       operationId: find
       parameters:
       - name: page
@@ -157,6 +163,7 @@ paths:
     get:
       tags:
       - loan-controller
+      summary: Get all loans with optional filters
       operationId: findAllLoans
       parameters:
       - name: vrstaKredita
