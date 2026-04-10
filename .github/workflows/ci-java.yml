@@ -17,6 +17,10 @@ on:
       - 'exchange-service/**'
       - 'stock-service/**'
       - 'credit-service/**'
+      - 'card-service/**'
+      - 'order-service/**'
+      - 'transaction-service/**'
+      - 'transfer-service/**'
   pull_request:
     branches: [main, dev]
     paths:
@@ -30,6 +34,10 @@ on:
       - 'exchange-service/**'
       - 'stock-service/**'
       - 'credit-service/**'
+      - 'card-service/**'
+      - 'order-service/**'
+      - 'transaction-service/**'
+      - 'transfer-service/**'
 
 jobs:
 
@@ -67,6 +75,14 @@ jobs:
               - 'stock-service/**'
             credit-service:
               - 'credit-service/**'
+            card-service:
+              - 'card-service/**'
+            order-service:
+              - 'order-service/**'
+            transaction-service:
+              - 'transaction-service/**'
+            transfer-service:
+              - 'transfer-service/**'
 
   # ── Build & Test ──────────────────────────────────────────────────────────
   build-and-test:
