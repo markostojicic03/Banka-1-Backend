@@ -21,7 +21,7 @@ public class RabbitClient {
     private final RabbitTemplate rabbitTemplate;
 
     /** Name of the RabbitMQ exchange to which messages are published. */
-    @Value("${rabbitmq.exchange}")
+    @Value("${notification.rabbit.exchange}")
     private String exchange;
 
     /**

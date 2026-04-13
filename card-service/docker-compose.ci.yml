@@ -36,6 +36,9 @@ services:
       RABBITMQ_USERNAME: guest
       RABBITMQ_PASSWORD: guest
       NOTIFICATION_EXCHANGE: employee.events
+      CARD_AUTO_EXCHANGE: employee.events
+      CARD_AUTO_QUEUE: card-service-auto-card-queue
+      CARD_AUTO_ROUTING_KEY: card.create
       SERVICES_CLIENT_URL: http://client-service:8083
       SERVICES_ACCOUNT_URL: http://account-service:8084
       JWT_SECRET: ci-test-secret-that-is-long-enough-for-hmac

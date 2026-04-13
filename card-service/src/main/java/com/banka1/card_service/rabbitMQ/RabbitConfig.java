@@ -14,23 +14,13 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Spring konfiguracija RabbitMQ infrastrukture.
- * Definise queue, topic exchange, binding i JSON konverter za serijalizaciju poruka.
+ * RabbitMQ infrastructure used by card-service.
+ *
+ * <p>The service publishes card lifecycle notifications and also consumes the
+ * {@code card.create} event sent after account creation.
  */
 @Configuration
 public class RabbitConfig {
-
-    /** Naziv RabbitMQ queue-a na koji stizu card notifikacije. */
-    @Value("${rabbitmq.queue}")
-    private String queueName;
-
-    /** Naziv topic exchange-a na koji se poruke objavljuju. */
-    @Value("${rabbitmq.exchange}")
-    private String exchangeName;
-
-    /** Routing kljuc koji vezuje exchange za queue. */
-    @Value("${rabbitmq.routing-key}")
-    private String routingKey;
 
     /** Hostname RabbitMQ servera. */
     @Value("${spring.rabbitmq.host}")
@@ -47,6 +37,52 @@ public class RabbitConfig {
     /** Lozinka za autentifikaciju na RabbitMQ serveru. */
     @Value("${spring.rabbitmq.password}")
     private String rabbitPassword;
+
+    /**
+     * Creates the shared topic exchange used for account and card events.
+     *
+     * @param exchangeName exchange name from configuration
+     * @return durable topic exchange
+     */
+    @Bean
+    public TopicExchange cardEventsExchange(
+            @Value("${card.rabbit.auto.exchange}") String exchangeName
+    ) {
+        return new TopicExchange(exchangeName, true, false);
+    }
+
+    /**
+     * Creates the durable queue consumed by the automatic-card listener.
+     *
+     * @param queueName queue name from configuration
+     * @return durable queue
+     */
+    @Bean
+    public Queue automaticCardCreationQueue(
+            @Value("${card.rabbit.auto.queue}") String queueName
+    ) {
+        return new Queue(queueName, true);
+    }
+
+    /**
+     * Binds the automatic-card queue to the shared exchange using the
+     * {@code card.create} routing key.
+     *
+     * @param automaticCardCreationQueue listener queue bean
+     * @param cardEventsExchange topic exchange bean
+     * @param routingKey exact routing key for automatic card creation
+     * @return exchange-to-queue binding
+     */
+    @Bean
+    public Binding automaticCardCreationBinding(
+            Queue automaticCardCreationQueue,
+            TopicExchange cardEventsExchange,
+            @Value("${card.rabbit.auto.routing-key}") String routingKey
+    ) {
+        return BindingBuilder.bind(automaticCardCreationQueue)
+                .to(cardEventsExchange)
+                .with(routingKey);
+    }
 
     /**
      * Kreira RabbitMQ connection factory na osnovu vrednosti iz konfiguracije.
@@ -66,55 +102,24 @@ public class RabbitConfig {
      * Kreira RabbitTemplate i povezuje JSON konverter poruka.
      *
      * @param connectionFactory factory za otvaranje RabbitMQ konekcija
-     * @param jacksonMessageConverter konverter objekata u JSON poruke
+     * @param messageConverter konverter objekata u JSON poruke
      * @return konfigurisan RabbitTemplate
      */
     @Bean
-    public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory, MessageConverter jacksonMessageConverter) {
+    public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory, MessageConverter messageConverter) {
         RabbitTemplate template = new RabbitTemplate(connectionFactory);
-        template.setMessageConverter(jacksonMessageConverter);
+        template.setMessageConverter(messageConverter);
         return template;
     }
 
     /**
-     * Registruje Jackson konverter za serijalizaciju RabbitMQ poruka u JSON format.
+     * Registers a JSON converter used both for publishing notifications and
+     * consuming card creation events.
      *
-     * @return JSON message converter
+     * @return Jackson-based message converter
      */
     @Bean
-    public MessageConverter jacksonMessageConverter() {
+    public MessageConverter messageConverter() {
         return new JacksonJsonMessageConverter();
-    }
-
-    /**
-     * Kreira trajni RabbitMQ queue sa konfigurisanim nazivom.
-     *
-     * @return deklarisani durable queue
-     */
-    @Bean
-    public Queue queue() {
-        return new Queue(queueName, true);
-    }
-
-    /**
-     * Kreira topic exchange za rutiranje notifikacija.
-     *
-     * @return deklarisani topic exchange
-     */
-    @Bean
-    public TopicExchange topicExchange() {
-        return new TopicExchange(exchangeName);
-    }
-
-    /**
-     * Povezuje queue i exchange preko konfigurisanog routing kljuca.
-     *
-     * @param queue queue koji prima poruke
-     * @param topicExchange exchange preko kog se poruke rutiraju
-     * @return deklarisani binding
-     */
-    @Bean
-    public Binding binding(Queue queue, TopicExchange topicExchange) {
-        return BindingBuilder.bind(queue).to(topicExchange).with(routingKey);
     }
 }

@@ -179,10 +179,18 @@ Endpoint:
 POST /auto
 ```
 
+Event trigger used in production flow:
+
+```text
+RabbitMQ routing key: card.create
+```
+
 Who calls it:
 
 - internal service caller or admin
 - intended for the automatic account-created flow
+- in the asynchronous flow, `account-service` publishes `card.create` after the account transaction commits
+- `card-service` consumes that event and delegates to the same internal automatic creation logic used by `POST /auto`
 
 What the request must contain:
 
@@ -444,6 +452,9 @@ Create a `.env` file in `setup/` or in `card-service/` with values such as:
 | `RABBITMQ_USERNAME` | RabbitMQ username | `rabbit` |
 | `RABBITMQ_PASSWORD` | RabbitMQ password | `rabbit` |
 | `NOTIFICATION_EXCHANGE` | Notification exchange name | `employee.events` |
+| `CARD_AUTO_EXCHANGE` | Exchange name consumed for automatic card creation events | `employee.events` |
+| `CARD_AUTO_QUEUE` | Queue consumed by `card-service` for automatic card creation events | `card-service-auto-card-queue` |
+| `CARD_AUTO_ROUTING_KEY` | Routing key bound for automatic card creation events | `card.create` |
 
 ## Persistence Notes
 
@@ -484,3 +495,14 @@ Payload notes:
 - `templateVariables.cardNumber` contains a masked card number
 - `templateVariables.accountNumber` contains a masked account number
 - `templateVariables.cardName` contains the card display name or fallback `kartica`
+
+## Automatic Card Creation Event Flow
+
+When account creation requests automatic card issuance, the async flow is:
+
+1. `account-service` commits the newly created account
+2. after commit, `account-service` publishes `CardEventDto` with routing key `card.create`
+3. `card-service` consumes the message from `CARD_AUTO_QUEUE`
+4. the listener maps `clientId` and `accountNumber` into `AutoCardCreationRequestDto`
+5. `card-service` calls the existing `createAutomaticCard(...)` service flow
+6. the new card is persisted with the configured automatic default limit
