@@ -92,6 +92,19 @@ class AccountControllerUnitTest {
         verify(accountService).getBankAccountDetails(CurrencyCode.RSD);
     }
 
+    @Test
+    void getStateAccountDetailsReturnsOkAndDelegates() {
+        AccountController controller = new AccountController(accountService);
+        InternalAccountDetailsDto expected = new InternalAccountDetailsDto("1110002000000000011", -2L, "RSD", BigDecimal.ZERO, "ACTIVE", "PERSONAL", null, null);
+        when(accountService.getStateAccountDetails(CurrencyCode.RSD)).thenReturn(expected);
+
+        ResponseEntity<InternalAccountDetailsDto> response = controller.getStateAccountDetails(null, CurrencyCode.RSD);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isEqualTo(expected);
+        verify(accountService).getStateAccountDetails(CurrencyCode.RSD);
+    }
+
     private PaymentDto paymentDto() {
         return new PaymentDto(
                 "111000100000000011",
