@@ -6,6 +6,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -69,5 +70,6 @@ public class LoanRequestDto {
 
     /** The applicant's bank account number (cannot be blank). */
     @NotBlank(message = "accountNumber ne sme biti prazan")
+    @Pattern(regexp = "^\\d{19}$", message = "Broj racuna mora imati 19 cifara")
     private String accountNumber;
 }
