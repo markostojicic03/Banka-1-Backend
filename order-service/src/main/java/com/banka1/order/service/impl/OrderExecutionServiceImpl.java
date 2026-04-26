@@ -273,6 +273,7 @@ public class OrderExecutionServiceImpl implements OrderExecutionService {
 
         portfolio.setReservedQuantity(Math.max(0, defaultInteger(portfolio.getReservedQuantity()) - quantity));
         portfolio.setQuantity(portfolio.getQuantity() - quantity);
+        portfolio.setPublicQuantity(Math.min(defaultInteger(portfolio.getPublicQuantity()), portfolio.getQuantity()));
         if (portfolio.getQuantity() == 0 && defaultInteger(portfolio.getReservedQuantity()) == 0) {
             portfolioRepository.delete(portfolio);
         } else {
