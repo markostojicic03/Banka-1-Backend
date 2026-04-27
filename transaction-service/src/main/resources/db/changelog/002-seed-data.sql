@@ -23,7 +23,7 @@ INSERT INTO payment_table (
     order_number,
     from_account_number, to_account_number,
     initial_amount, final_amount, commission,
-    recipient_client_id, recipient_name,
+    sender_client_id, recipient_client_id, recipient_name,
     payment_code, reference_number, payment_purpose,
     status, from_currency, to_currency, exchange_rate
 ) VALUES
@@ -33,7 +33,7 @@ INSERT INTO payment_table (
  'ORD-2026-0001',
  '1110001100000000111', '1110001200000000111',
  15000.00, 14850.00, 150.00,
- 2, 'Ana Anic',
+ 1, 2, 'Ana Anic',
  '221', 'REF-001', 'Podela troskova stanarine',
  'COMPLETED', 'RSD', 'RSD', NULL),
 
@@ -42,7 +42,7 @@ INSERT INTO payment_table (
  'ORD-2026-0002',
  '1110001200000000111', '1110001400000000111',
  8500.00, 8415.00, 85.00,
- 4, 'Stefan Stefanovic',
+ 2, 4, 'Stefan Stefanovic',
  '221', 'REF-002', 'Povracaj pozajmice',
  'COMPLETED', 'RSD', 'RSD', NULL),
 
@@ -51,7 +51,7 @@ INSERT INTO payment_table (
  'ORD-2026-0003',
  '1110001400000000111', '1110001300000000111',
  25000.00, 24750.00, 250.00,
- 3, 'Jovana Jovanovic',
+ 4, 3, 'Jovana Jovanovic',
  '289', 'REF-003', 'Uplata za zajednicki projekat',
  'COMPLETED', 'RSD', 'RSD', NULL),
 
@@ -60,7 +60,7 @@ INSERT INTO payment_table (
  'ORD-2026-0004',
  '1110001600000000111', '1110001500000000113',
  5000.00, 4950.00, 50.00,
- 5, 'Milica Milic',
+ 6, 5, 'Milica Milic',
  '221', NULL, 'Poklonili smo se',
  'COMPLETED', 'RSD', 'RSD', NULL),
 
@@ -69,7 +69,7 @@ INSERT INTO payment_table (
  'ORD-2026-0005',
  '1110001800000000111', '1110001100000000111',
  45000.00, 44550.00, 450.00,
- 1, 'Marko Markovic',
+ 8, 1, 'Marko Markovic',
  '221', 'REF-005', 'Naknada za konsultacije',
  'COMPLETED', 'RSD', 'RSD', NULL),
 
@@ -78,7 +78,7 @@ INSERT INTO payment_table (
  'ORD-2026-0006',
  '1110001500000000113', '1110001700000000115',
  3200.00, 3168.00, 32.00,
- 7, 'Jelena Jelic',
+ 5, 7, 'Jelena Jelic',
  '289', 'REF-006', 'Mesecna pretplata',
  'COMPLETED', 'RSD', 'RSD', NULL),
 
@@ -87,7 +87,7 @@ INSERT INTO payment_table (
  'ORD-2026-0007',
  '1110001300000000221', '1110001600000000221',
  500.00, 495.00, 5.00,
- 6, 'Nikola Nikolic',
+ 3, 6, 'Nikola Nikolic',
  '221', 'REF-007', 'Placanje za usluge',
  'COMPLETED', 'EUR', 'EUR', NULL),
 
@@ -96,7 +96,7 @@ INSERT INTO payment_table (
  'ORD-2026-0008',
  '1110001400000000221', '1110001800000000321',
  1200.00, 1188.00, 12.00,
- 8, 'Aleksandar Aleksic',
+ 4, 8, 'Aleksandar Aleksic',
  '221', 'REF-008', 'Refundacija troskova puta',
  'COMPLETED', 'USD', 'USD', NULL),
 
@@ -105,7 +105,7 @@ INSERT INTO payment_table (
  'ORD-2026-0009',
  '1110001800000000221', '1110001300000000221',
  750.00, 742.50, 7.50,
- 3, 'Jovana Jovanovic',
+ 8, 3, 'Jovana Jovanovic',
  '221', 'REF-009', 'Uplata za kurs',
  'COMPLETED', 'EUR', 'EUR', NULL),
 
@@ -114,16 +114,16 @@ INSERT INTO payment_table (
  'ORD-2026-0010',
  '1110001700000000115', '1110001800000000111',
  12000.00, 11880.00, 120.00,
- 8, 'Aleksandar Aleksic',
+ 7, 8, 'Aleksandar Aleksic',
  '289', 'REF-010', 'Kirija za studio',
  'COMPLETED', 'RSD', 'RSD', NULL),
 
--- 11. Marko (RSD) -> Nikola (RSD), cross-service payment, DENIED
+-- 11. Marko (RSD) -> Nikola (RSD), DENIED
 (0, NOW() - INTERVAL '6 days', NOW() - INTERVAL '6 days',
  'ORD-2026-0011',
  '1110001100000000111', '1110001600000000111',
  200000.00, 0.00, 0.00,
- 6, 'Nikola Nikolic',
+ 1, 6, 'Nikola Nikolic',
  '221', NULL, 'Investicija',
  'DENIED', 'RSD', 'RSD', NULL),
 
@@ -132,7 +132,7 @@ INSERT INTO payment_table (
  'ORD-2026-0012',
  '1110001600000000111', '1110001200000000111',
  9800.00, 9702.00, 98.00,
- 2, 'Ana Anic',
+ 6, 2, 'Ana Anic',
  '221', 'REF-012', 'Povracaj duga',
  'COMPLETED', 'RSD', 'RSD', NULL),
 
@@ -141,7 +141,7 @@ INSERT INTO payment_table (
  'ORD-2026-0013',
  '1110001200000000111', '1110001500000000113',
  6500.00, 6435.00, 65.00,
- 5, 'Milica Milic',
+ 2, 5, 'Milica Milic',
  '221', 'REF-013', 'Zajednicki vakcinalni fond',
  'IN_PROGRESS', 'RSD', 'RSD', NULL),
 
@@ -151,7 +151,7 @@ INSERT INTO payment_table (
  'ORD-2026-0014',
  '1110001800000000221', '1110001400000000221',
  1000.00, 1068.00, 12.00,
- 4, 'Stefan Stefanovic',
+ 8, 4, 'Stefan Stefanovic',
  '221', 'REF-014', 'Placanje medjunarodnih usluga',
  'COMPLETED', 'EUR', 'USD', 1.08000000),
 
@@ -160,6 +160,6 @@ INSERT INTO payment_table (
  'ORD-2026-0015',
  '1110001400000000111', '1110001700000000115',
  4500.00, 4455.00, 45.00,
- 7, 'Jelena Jelic',
+ 4, 7, 'Jelena Jelic',
  '289', 'REF-015', 'Uplata clanarine',
  'IN_PROGRESS', 'RSD', 'RSD', NULL);
