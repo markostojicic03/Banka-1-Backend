@@ -254,6 +254,21 @@ Example response:
 }
 ```
 
+### `GET /api/listings/{id}`
+
+Returns one detailed listing response with type-specific fields and daily price history.
+
+For stock listings, the response also includes `optionGroups`, where each option now exposes:
+
+- `last`
+- `bid`
+- `ask`
+- `volume`
+
+These fields come from persisted option market-data columns on `stock_option`.
+In the current project setup, these values are initialized from seeded option data because the service does not yet integrate a dedicated options market-data provider.
+The current project does not expose `theta`; the specification explicitly notes that it is not used.
+
 ### `GET /api/listings/stocks`
 
 Returns paginated stock listings.
@@ -307,6 +322,12 @@ Authentication:
 
 - available only to actuary-side roles
 - `CLIENT_BASIC` cannot access this endpoint
+
+Why:
+
+- this is an intentional project extension
+- in the specification, `CLIENT_BASIC` is treated as a regular client user, not a trading user
+- because of that, FX listings are exposed only to trading/internal roles (`BASIC`, `AGENT`, `SUPERVISOR`, `ADMIN`, `SERVICE`)
 
 Filtering, sorting, and pagination are the same as for `/api/listings/stocks`.
 
@@ -530,6 +551,7 @@ Additional role rules:
 - `POST /admin/stocks/{ticker}/refresh-market-data` requires `ADMIN` or `SUPERVISOR`
 - `GET /api/listings/stocks` and `GET /api/listings/futures` require one of `CLIENT_BASIC`, `BASIC`, `AGENT`, `SUPERVISOR`, `ADMIN`, or `SERVICE`
 - `GET /api/listings/forex` requires one of `BASIC`, `AGENT`, `SUPERVISOR`, `ADMIN`, or `SERVICE`
+  This is intentional: `CLIENT_BASIC` is a regular client role and, per the project extension/spec interpretation, does not have trading access to FX listings.
 - `GET /exchange/info`, `GET /api/stock-exchanges`, and `GET /api/stock-exchanges/{id}/is-open` require one of `CLIENT_BASIC`, `BASIC`, `AGENT`, `SUPERVISOR`, `ADMIN`, or `SERVICE`
 
 The local JWT decoder uses the shared HMAC secret from:

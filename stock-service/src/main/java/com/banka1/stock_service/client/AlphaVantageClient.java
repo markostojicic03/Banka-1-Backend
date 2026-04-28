@@ -282,6 +282,9 @@ public class AlphaVantageClient {
     private String requireApiKey() {
         String apiKey = stockMarketDataProperties.apiKey();
         if (apiKey == null || apiKey.isBlank()) {
+            apiKey = stockMarketDataProperties.alphaVantageApiKey();
+        }
+        if (apiKey == null || apiKey.isBlank()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Stock market data API key is not configured.");
         }
         return apiKey;

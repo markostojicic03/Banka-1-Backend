@@ -1,4 +1,4 @@
-package com.banka1.stock_service.service;
+package com.banka1.stock_service.scheduler;
 
 import com.banka1.stock_service.config.ListingRefreshProperties;
 import com.banka1.stock_service.domain.Listing;
@@ -9,6 +9,8 @@ import com.banka1.stock_service.dto.ListingRefreshResponse;
 import com.banka1.stock_service.dto.StockExchangeMarketPhase;
 import com.banka1.stock_service.dto.StockExchangeStatusResponse;
 import com.banka1.stock_service.repository.ListingRepository;
+import com.banka1.stock_service.service.ListingMarketDataRefreshService;
+import com.banka1.stock_service.service.StockExchangeService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;

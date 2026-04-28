@@ -5,6 +5,7 @@ import com.banka1.stock_service.config.ExchangeServiceClientProperties;
 import com.banka1.stock_service.config.StockMarketDataProperties;
 import com.banka1.stock_service.dto.ExchangeServiceInfoResponse;
 import com.banka1.stock_service.dto.StockServiceInfoResponse;
+import io.swagger.v3.oas.annotations.Operation;
 import lombok.AllArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,6 +33,7 @@ public class StockInfoController {
      * @param forwardedPrefix optional gateway prefix from the request header
      * @return bootstrap info response with the service status and main URL configurations
      */
+    @Operation(summary = "Get stock service info")
     @GetMapping("/info")
     public StockServiceInfoResponse info(
             @RequestHeader(value = "X-Forwarded-Prefix", required = false) String forwardedPrefix
@@ -53,6 +55,7 @@ public class StockInfoController {
      *
      * @return exchange service response
      */
+    @Operation(summary = "Get exchange service info")
     @GetMapping("/exchange/info")
     @PreAuthorize("hasAnyRole('CLIENT_BASIC', 'BASIC', 'AGENT', 'SUPERVISOR', 'ADMIN', 'SERVICE')")
     public ExchangeServiceInfoResponse exchangeInfo() {

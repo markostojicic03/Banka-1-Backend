@@ -44,6 +44,7 @@ class AlphaVantageClientTest {
                 new StockMarketDataProperties(
                         "https://www.alphavantage.co",
                         "demo-key",
+                        null,
                         30
                 )
         );
@@ -175,5 +176,43 @@ class AlphaVantageClientTest {
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(exception -> assertThat(((ResponseStatusException) exception).getStatusCode())
                         .isEqualTo(HttpStatus.GATEWAY_TIMEOUT));
+    }
+
+    @Test
+    void fetchQuoteFallsBackToLegacyAlphaVantageApiKeyWhenPrimaryKeyIsBlank() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer fallbackServer = MockRestServiceServer.bindTo(builder).build();
+
+        RestClient restClient = builder
+                .baseUrl("https://www.alphavantage.co")
+                .build();
+
+        AlphaVantageClient fallbackClient = new AlphaVantageClient(
+                restClient,
+                new StockMarketDataProperties(
+                        "https://www.alphavantage.co",
+                        "",
+                        "legacy-demo-key",
+                        30
+                )
+        );
+
+        fallbackServer.expect(requestTo(containsString("/query?function=GLOBAL_QUOTE&symbol=AAPL&apikey=legacy-demo-key")))
+                .andRespond(withSuccess("""
+                        {
+                          "Global Quote": {
+                            "01. symbol": "AAPL",
+                            "05. price": "212.40000000",
+                            "06. volume": "25000",
+                            "07. latest trading day": "2026-04-08",
+                            "09. change": "4.60000000"
+                          }
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        AlphaVantageQuoteResponse response = fallbackClient.fetchQuote("AAPL");
+
+        assertThat(response.symbol()).isEqualTo("AAPL");
+        assertThat(response.price()).isEqualByComparingTo(new BigDecimal("212.40000000"));
     }
 }

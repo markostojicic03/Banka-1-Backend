@@ -6,7 +6,6 @@ import com.banka1.stock_service.dto.StockExchangeResponse;
 import com.banka1.stock_service.dto.StockExchangeStatusResponse;
 import com.banka1.stock_service.dto.StockExchangeToggleResponse;
 import com.banka1.stock_service.repository.StockExchangeRepository;
-import com.banka1.stock_service.service.NoOpHolidayService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -144,11 +143,7 @@ class StockExchangeServiceImplTest {
 
     private StockExchangeServiceImpl serviceAt(String instant) {
         Clock clock = Clock.fixed(Instant.parse(instant), ZoneOffset.UTC);
-        return new StockExchangeServiceImpl(
-                stockExchangeRepository,
-                new NoOpHolidayService(),
-                clock
-        );
+        return new StockExchangeServiceImpl(stockExchangeRepository, clock);
     }
 
     private StockExchange createExchange(Long id, String name, String acronym, String micCode, boolean active) {

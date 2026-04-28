@@ -122,6 +122,10 @@ class ListingControllerWebMvcTest {
                                 new java.math.BigDecimal("175.0000"),
                                 new java.math.BigDecimal("0.25000000"),
                                 2_500,
+                                new java.math.BigDecimal("4.25000000"),
+                                new java.math.BigDecimal("4.15000000"),
+                                new java.math.BigDecimal("4.35000000"),
+                                625L,
                                 true
                         )),
                         List.of()
@@ -141,6 +145,10 @@ class ListingControllerWebMvcTest {
                 .andExpect(jsonPath("$.requestedPeriod").value("WEEK"))
                 .andExpect(jsonPath("$.priceHistory[0].date").value("2026-04-07"))
                 .andExpect(jsonPath("$.stockDetails.contractSize").value(1))
+                .andExpect(jsonPath("$.optionGroups[0].calls[0].last").value(4.25))
+                .andExpect(jsonPath("$.optionGroups[0].calls[0].bid").value(4.15))
+                .andExpect(jsonPath("$.optionGroups[0].calls[0].ask").value(4.35))
+                .andExpect(jsonPath("$.optionGroups[0].calls[0].volume").value(625))
                 .andExpect(jsonPath("$.optionGroups[0].calls[0].inTheMoney").value(true));
 
         verify(listingQueryService).getListingDetails(15L, ListingDetailsPeriod.WEEK);

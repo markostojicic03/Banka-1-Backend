@@ -4,6 +4,7 @@ import com.banka1.stock_service.config.StockExchangeSeedProperties;
 import com.banka1.stock_service.domain.StockExchange;
 import com.banka1.stock_service.dto.StockExchangeImportResponse;
 import com.banka1.stock_service.repository.StockExchangeRepository;
+import com.banka1.stock_service.runner.StockExchangeCsvImportService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;

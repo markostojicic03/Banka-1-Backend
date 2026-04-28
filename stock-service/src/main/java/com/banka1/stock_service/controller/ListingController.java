@@ -10,6 +10,7 @@ import com.banka1.stock_service.dto.ListingSummaryResponse;
 import com.banka1.stock_service.repository.ListingRepository;
 import com.banka1.stock_service.service.ListingMarketDataRefreshService;
 import com.banka1.stock_service.service.ListingQueryService;
+import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Sort;
@@ -30,6 +31,15 @@ import static org.springframework.http.HttpStatus.NOT_FOUND;
 
 /**
  * Listing API for listing-catalog queries and manual market-data refresh operations.
+ *
+ * Listing is one of the following:
+ *  - Stock
+ *  - Future
+ *  - Forex Pair
+ *
+ *  NOTE: Option is NOT really a listing, it is connected with a listing, because listing
+ *  API returns them through stock-details, and not as "1 separate listing endpoint"
+ *  TLDR: in our system, we support only OPTIONS for STOCK  (no futures, no forex)
  */
 @RestController
 @RequiredArgsConstructor
@@ -40,12 +50,13 @@ public class ListingController {
     private final ListingRepository listingRepository;
 
     /**
-     * Returns one detailed listing view with type-specific fields and historical prices.
+     * Returns 1 detailed listing view with type-specific fields and historical prices.
      *
      * @param id listing identifier
      * @param period requested history window
      * @return detailed listing response
      */
+    @Operation(summary = "Get listing details")
     @GetMapping("/api/listings/{id}")
     @PreAuthorize("hasAnyRole('CLIENT_BASIC', 'BASIC', 'AGENT', 'SUPERVISOR', 'ADMIN', 'SERVICE')")
     public ResponseEntity<ListingDetailsResponse> getListingDetails(
@@ -55,8 +66,10 @@ public class ListingController {
     ) {
         // Guard: resolve listing type cheaply before triggering full DB work, so that
         // unauthorized forex access is rejected before any heavy query executes.
+        // TLDR: ne pravimo full ListingDetailsResponse odmah, dok ne prodje auth provera za forex
         ListingType listingType = listingRepository.findListingTypeById(id)
-                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Listing with id %s was not found.".formatted(id)));
+                .orElseThrow(() -> new ResponseStatusException(
+                        NOT_FOUND, "Listing with id %s was not found.".formatted(id)));
         rejectUnauthorizedForexAccessByType(listingType, authentication);
 
         ListingDetailsResponse response = listingQueryService.getListingDetails(id, period);
@@ -64,7 +77,7 @@ public class ListingController {
     }
 
     /**
-     * Returns paginated stock listings available to clients and actuary-side users.
+     * Returns paginated stock listings available to clients and internal users.
      *
      * @param filter shared listing filters
      * @param page zero-based page index
@@ -73,6 +86,7 @@ public class ListingController {
      * @param sortDirection sort direction
      * @return paginated stock listings
      */
+    @Operation(summary = "Get stock listings")
     @GetMapping("/api/listings/stocks")
     @PreAuthorize("hasAnyRole('CLIENT_BASIC', 'BASIC', 'AGENT', 'SUPERVISOR', 'ADMIN', 'SERVICE')")
     public ResponseEntity<Page<ListingSummaryResponse>> getStockListings(
@@ -93,7 +107,7 @@ public class ListingController {
     }
 
     /**
-     * Returns paginated futures listings available to clients and actuary-side users.
+     * Returns paginated futures listings available to clients and internal users.
      *
      * @param filter shared listing filters
      * @param page zero-based page index
@@ -102,6 +116,7 @@ public class ListingController {
      * @param sortDirection sort direction
      * @return paginated futures listings
      */
+    @Operation(summary = "Get futures listings")
     @GetMapping("/api/listings/futures")
     @PreAuthorize("hasAnyRole('CLIENT_BASIC', 'BASIC', 'AGENT', 'SUPERVISOR', 'ADMIN', 'SERVICE')")
     public ResponseEntity<Page<ListingSummaryResponse>> getFuturesListings(
@@ -122,7 +137,11 @@ public class ListingController {
     }
 
     /**
-     * Returns paginated FX listings available only to actuary-side users.
+     * Returns paginated FX listings available only to internal users.
+     *
+     * <p>This is intentional: in this project, {@code CLIENT_BASIC} is treated as a
+     * regular client user rather than a trading user, so FX access remains limited
+     * to internal/trading-side roles.
      *
      * @param filter shared listing filters
      * @param page zero-based page index
@@ -131,6 +150,7 @@ public class ListingController {
      * @param sortDirection sort direction
      * @return paginated FX listings
      */
+    @Operation(summary = "Get forex listings")
     @GetMapping("/api/listings/forex")
     @PreAuthorize("hasAnyRole('BASIC', 'AGENT', 'SUPERVISOR', 'ADMIN', 'SERVICE')")
     public ResponseEntity<Page<ListingSummaryResponse>> getForexListings(
@@ -156,6 +176,7 @@ public class ListingController {
      * @param id listing identifier
      * @return refresh summary
      */
+    @Operation(summary = "Refresh listing market data")
     @PostMapping("/api/listings/{id}/refresh")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPERVISOR')")
     public ResponseEntity<ListingRefreshResponse> refreshListing(@PathVariable Long id) {

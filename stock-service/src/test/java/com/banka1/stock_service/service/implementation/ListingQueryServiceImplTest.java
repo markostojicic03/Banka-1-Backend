@@ -23,7 +23,7 @@ import com.banka1.stock_service.repository.StockExchangeRepository;
 import com.banka1.stock_service.repository.StockRepository;
 import com.banka1.stock_service.repository.StockOptionRepository;
 import com.banka1.stock_service.service.ListingQueryService;
-import com.banka1.stock_service.service.StockTickerSeedService;
+import com.banka1.stock_service.runner.StockTickerSeedService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -223,6 +223,10 @@ class ListingQueryServiceImplTest {
                 "175.0000",
                 "0.25000000",
                 2_500,
+                "4.25000000",
+                "4.15000000",
+                "4.35000000",
+                625L,
                 LocalDate.of(2026, 5, 15)
         );
         saveStockOption(
@@ -232,6 +236,10 @@ class ListingQueryServiceImplTest {
                 "170.0000",
                 "0.27000000",
                 1_800,
+                "5.10000000",
+                "4.98000000",
+                "5.22000000",
+                450L,
                 LocalDate.of(2026, 5, 15)
         );
         saveStockOption(
@@ -241,6 +249,10 @@ class ListingQueryServiceImplTest {
                 "190.0000",
                 "0.21000000",
                 1_400,
+                "3.75000000",
+                "3.65000000",
+                "3.85000000",
+                350L,
                 LocalDate.of(2026, 6, 19)
         );
 
@@ -268,6 +280,10 @@ class ListingQueryServiceImplTest {
         assertThat(response.optionGroups().getFirst().settlementDate()).isEqualTo(LocalDate.of(2026, 5, 15));
         assertThat(response.optionGroups().getFirst().calls()).hasSize(1);
         assertThat(response.optionGroups().getFirst().puts()).hasSize(1);
+        assertThat(response.optionGroups().getFirst().calls().getFirst().last()).isEqualByComparingTo("4.25000000");
+        assertThat(response.optionGroups().getFirst().calls().getFirst().bid()).isEqualByComparingTo("4.15000000");
+        assertThat(response.optionGroups().getFirst().calls().getFirst().ask()).isEqualByComparingTo("4.35000000");
+        assertThat(response.optionGroups().getFirst().calls().getFirst().volume()).isEqualTo(625L);
         assertThat(response.optionGroups().getFirst().calls().getFirst().inTheMoney()).isTrue();
         assertThat(response.optionGroups().getFirst().puts().getFirst().inTheMoney()).isFalse();
         assertThat(response.optionGroups().get(1).calls().getFirst().inTheMoney()).isFalse();
@@ -557,6 +573,10 @@ class ListingQueryServiceImplTest {
      * @param strikePrice strike price
      * @param impliedVolatility implied volatility
      * @param openInterest open interest
+     * @param lastPrice last traded option price
+     * @param bid bid price
+     * @param ask ask price
+     * @param volume traded volume
      * @param settlementDate settlement date
      */
     private void saveStockOption(
@@ -566,6 +586,10 @@ class ListingQueryServiceImplTest {
             String strikePrice,
             String impliedVolatility,
             int openInterest,
+            String lastPrice,
+            String bid,
+            String ask,
+            long volume,
             LocalDate settlementDate
     ) {
         StockOption option = new StockOption();
@@ -575,6 +599,10 @@ class ListingQueryServiceImplTest {
         option.setStrikePrice(new BigDecimal(strikePrice));
         option.setImpliedVolatility(new BigDecimal(impliedVolatility));
         option.setOpenInterest(openInterest);
+        option.setLastPrice(new BigDecimal(lastPrice));
+        option.setBid(new BigDecimal(bid));
+        option.setAsk(new BigDecimal(ask));
+        option.setVolume(volume);
         option.setSettlementDate(settlementDate);
         stockOptionRepository.saveAndFlush(option);
     }

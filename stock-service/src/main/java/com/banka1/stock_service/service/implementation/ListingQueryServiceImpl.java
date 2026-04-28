@@ -631,7 +631,6 @@ public class ListingQueryServiceImpl implements ListingQueryService {
      * Applies the futures settlement-date filter when present.
      *
      * @param row derived listing row
-     * @param settlementDate requested settlement date
      * @return {@code true} when the filter matches or is absent
      */
     private boolean matchesSettlementDate(ListingCatalogRow row, LocalDate from, LocalDate to) {
@@ -738,6 +737,10 @@ public class ListingQueryServiceImpl implements ListingQueryService {
                 option.getStrikePrice(),
                 option.getImpliedVolatility(),
                 option.getOpenInterest(),
+                option.getLastPrice(),
+                option.getBid(),
+                option.getAsk(),
+                option.getVolume(),
                 option.isInTheMoney(stockPrice)
         );
     }

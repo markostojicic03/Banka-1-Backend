@@ -42,8 +42,4 @@ public class CreateBuyOrderRequest {
     /** ID of the account to debit funds from. Must be positive and belong to the authenticated user. */
     @Positive
     private Long accountId;
-
-    /** Optional bank account ID used only for actuary BUY funding. Must match the order currency when provided. */
-    @Positive
-    private Long bankAccountId;
 }

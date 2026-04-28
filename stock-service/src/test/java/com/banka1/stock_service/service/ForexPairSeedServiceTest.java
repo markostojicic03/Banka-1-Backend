@@ -9,6 +9,7 @@ import com.banka1.stock_service.dto.ForexPairImportResponse;
 import com.banka1.stock_service.repository.ForexPairRepository;
 import com.banka1.stock_service.repository.ListingRepository;
 import com.banka1.stock_service.repository.StockExchangeRepository;
+import com.banka1.stock_service.runner.ForexPairSeedService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;

@@ -99,6 +99,30 @@ public class StockOption {
     private Integer openInterest;
 
     /**
+     * Last traded option price used by stock-details consumers.
+     */
+    @Column(name = "last_price", nullable = false, precision = 19, scale = 8)
+    private BigDecimal lastPrice;
+
+    /**
+     * Current ask price for the option contract.
+     */
+    @Column(name = "ask", nullable = false, precision = 19, scale = 8)
+    private BigDecimal ask;
+
+    /**
+     * Current bid price for the option contract.
+     */
+    @Column(name = "bid", nullable = false, precision = 19, scale = 8)
+    private BigDecimal bid;
+
+    /**
+     * Current traded option volume.
+     */
+    @Column(name = "volume", nullable = false)
+    private Long volume;
+
+    /**
      * Settlement or expiration date of the option contract.
      */
     @Column(name = "settlement_date", nullable = false)

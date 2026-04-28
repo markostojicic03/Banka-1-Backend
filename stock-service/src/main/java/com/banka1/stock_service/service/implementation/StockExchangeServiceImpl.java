@@ -6,7 +6,6 @@ import com.banka1.stock_service.dto.StockExchangeResponse;
 import com.banka1.stock_service.dto.StockExchangeStatusResponse;
 import com.banka1.stock_service.dto.StockExchangeToggleResponse;
 import com.banka1.stock_service.repository.StockExchangeRepository;
-import com.banka1.stock_service.service.HolidayService;
 import com.banka1.stock_service.service.StockExchangeService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -47,37 +46,29 @@ import java.util.List;
 public class StockExchangeServiceImpl implements StockExchangeService {
 
     private final StockExchangeRepository stockExchangeRepository;
-    private final HolidayService holidayService;
     private final Clock clock;
 
     /**
      * Creates the production service using the system UTC clock.
      *
      * @param stockExchangeRepository repository for stock exchanges
-     * @param holidayService holiday resolver
      */
     @Autowired
-    public StockExchangeServiceImpl(
-            StockExchangeRepository stockExchangeRepository,
-            HolidayService holidayService
-    ) {
-        this(stockExchangeRepository, holidayService, Clock.systemUTC());
+    public StockExchangeServiceImpl(StockExchangeRepository stockExchangeRepository) {
+        this(stockExchangeRepository, Clock.systemUTC());
     }
 
     /**
      * Creates the service with an explicit clock for deterministic TESTS.
      *
      * @param stockExchangeRepository repository for stock exchanges
-     * @param holidayService holiday resolver
      * @param clock time source used to derive exchange-local times
      */
     StockExchangeServiceImpl(
             StockExchangeRepository stockExchangeRepository,
-            HolidayService holidayService,
             Clock clock
     ) {
         this.stockExchangeRepository = stockExchangeRepository;
-        this.holidayService = holidayService;
         this.clock = clock;
     }
 
@@ -110,7 +101,7 @@ public class StockExchangeServiceImpl implements StockExchangeService {
      *     <li>load the exchange by id</li>
      *     <li>convert {@code Instant.now(clock)} into the exchange-local timezone</li>
      *     <li>extract {@code localDate} and {@code localTime}</li>
-     *     <li>ask {@link HolidayService} whether that local date is a holiday</li>
+     *     <li>check whether that local date is a holiday</li>
      *     <li>derive {@code workingDay = !weekend && !holiday}</li>
      *     <li>calculate the natural market phase from the configured time windows</li>
      *     <li>if {@code isActive == false}, bypass the normal check and treat the exchange as open</li>
@@ -143,9 +134,7 @@ public class StockExchangeServiceImpl implements StockExchangeService {
         LocalDate localDate = localDateTime.toLocalDate();
         LocalTime localTime = localDateTime.toLocalTime();
 
-        // Holiday resolution is intentionally abstracted behind HolidayService so a future
-        // deterministic calendar source can be added without changing the session logic.
-        boolean holiday = holidayService.isHoliday(exchange.getPolity(), localDate);
+        boolean holiday = isHoliday(exchange.getPolity(), localDate);
 
         boolean workingDay = isWorkingDay(localDate, holiday);
         StockExchangeMarketPhase naturalPhase = resolveMarketPhase(exchange, localTime, workingDay);
@@ -251,7 +240,7 @@ public class StockExchangeServiceImpl implements StockExchangeService {
      * <p>The current rule is:
      * a day is a working day only if it is not Saturday, not Sunday, and not a holiday.
      *
-     * <p>Because the current {@link HolidayService} implementation is a no-op stub,
+     * <p>Because the current holiday check always returns {@code false},
      * the runtime behavior today is effectively "not weekend".
      * The method is still written against the holiday flag so a real holiday source can be added later
      * without changing the rest of the status logic.
@@ -267,6 +256,23 @@ public class StockExchangeServiceImpl implements StockExchangeService {
     private boolean isWorkingDay(LocalDate localDate, boolean holiday) {
         DayOfWeek dayOfWeek = localDate.getDayOfWeek();
         return dayOfWeek != DayOfWeek.SATURDAY && dayOfWeek != DayOfWeek.SUNDAY && !holiday;
+    }
+
+    /**
+     * IMPORTANT: this holiday check is intentionally a stub for now.
+     *
+     * <p>TODO:
+     * replace this with a real holiday-calendar implementation once exchange-specific
+     * holiday support is required. Until then, the service always returns {@code false},
+     * so stock-exchange status depends only on timezone conversion, weekend detection,
+     * session windows, and the active-toggle test bypass.
+     *
+     * @param polity exchange polity/country
+     * @param localDate exchange-local date
+     * @return always {@code false} until holiday support is implemented
+     */
+    private boolean isHoliday(String polity, LocalDate localDate) {
+        return false;
     }
 
     /**

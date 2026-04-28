@@ -9,7 +9,8 @@ import org.springframework.validation.annotation.Validated;
  * Configuration properties for the external stock market data provider.
  *
  * @param baseUrl base URL of the external market data API
- * @param apiKey API key used to access the provider;
+ * @param apiKey primary API key used to access the provider
+ * @param alphaVantageApiKey legacy Alpha Vantage API key used as a fallback when the primary key is blank
  * @param dailyHistoryLimit number of recent daily snapshots persisted during one refresh
  */
 @Validated
@@ -17,6 +18,7 @@ import org.springframework.validation.annotation.Validated;
 public record StockMarketDataProperties(
         @NotBlank String baseUrl,
         String apiKey,
+        String alphaVantageApiKey,
         @Positive int dailyHistoryLimit
 ) {
 }

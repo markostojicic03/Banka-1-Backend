@@ -1,4 +1,4 @@
-package com.banka1.stock_service.service;
+package com.banka1.stock_service.runner;
 
 import java.util.List;
 

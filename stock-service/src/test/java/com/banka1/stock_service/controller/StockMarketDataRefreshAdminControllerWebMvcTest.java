@@ -1,7 +1,9 @@
 package com.banka1.stock_service.controller;
 
+import com.banka1.stock_service.dto.StockBulkRefreshAcceptedResponse;
 import com.banka1.stock_service.dto.StockMarketDataRefreshResponse;
 import com.banka1.stock_service.service.StockMarketDataRefreshService;
+import com.banka1.stock_service.web.StockServiceResponseStatusExceptionHandler;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -31,13 +33,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * WebMvc tests for {@link StockMarketDataAdminController}.
+ * WebMvc tests for {@link StockMarketDataRefreshAdminController}.
  */
-@WebMvcTest(StockMarketDataAdminController.class)
+@WebMvcTest(StockMarketDataRefreshAdminController.class)
 @AutoConfigureMockMvc
-@Import(StockMarketDataAdminControllerWebMvcTest.TestSecurityConfig.class)
+@Import({
+        StockMarketDataRefreshAdminControllerWebMvcTest.TestSecurityConfig.class,
+        StockServiceResponseStatusExceptionHandler.class
+})
 @ActiveProfiles("test")
-class StockMarketDataAdminControllerWebMvcTest {
+class StockMarketDataRefreshAdminControllerWebMvcTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -63,6 +68,18 @@ class StockMarketDataAdminControllerWebMvcTest {
                 .andExpect(jsonPath("$.refreshedDailyEntries").value(2));
 
         verify(stockMarketDataRefreshService).refreshStock("AAPL");
+    }
+
+    @Test
+    void refreshAllStocksReturnsAcceptedAndTriggersBackgroundJob() throws Exception {
+        mockMvc.perform(post("/admin/stocks/refresh-all")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))
+                                .jwt(token -> token.claim("id", 77L))))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status").value("STARTED"))
+                .andExpect(jsonPath("$.message").value("Bulk stock refresh started."));
+
+        verify(stockMarketDataRefreshService).triggerRefreshAllStocks();
     }
 
     @TestConfiguration

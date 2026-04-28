@@ -4,6 +4,7 @@ import com.banka1.stock_service.dto.StockExchangeResponse;
 import com.banka1.stock_service.dto.StockExchangeStatusResponse;
 import com.banka1.stock_service.dto.StockExchangeToggleResponse;
 import com.banka1.stock_service.service.StockExchangeService;
+import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -32,6 +33,7 @@ public class StockExchangeController {
      *
      * @return list of exchanges
      */
+    @Operation(summary = "Get all stock exchanges")
     @GetMapping("/api/stock-exchanges")
     @PreAuthorize("hasAnyRole('CLIENT_BASIC', 'BASIC', 'AGENT', 'SUPERVISOR', 'ADMIN', 'SERVICE')")
     public ResponseEntity<List<StockExchangeResponse>> getStockExchanges() {
@@ -45,6 +47,7 @@ public class StockExchangeController {
      * @param id exchange identifier
      * @return runtime market-status response
      */
+    @Operation(summary = "Get stock exchange open status")
     @GetMapping("/api/stock-exchanges/{id}/is-open")
     @PreAuthorize("hasAnyRole('CLIENT_BASIC', 'BASIC', 'AGENT', 'SUPERVISOR', 'ADMIN', 'SERVICE')")
     public ResponseEntity<StockExchangeStatusResponse> getStockExchangeStatus(@PathVariable Long id) {
@@ -58,6 +61,7 @@ public class StockExchangeController {
      * @param id exchange identifier
      * @return updated toggle state
      */
+    @Operation(summary = "Toggle stock exchange active flag")
     @PutMapping("/api/stock-exchanges/{id}/toggle-active")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPERVISOR')")
     public ResponseEntity<StockExchangeToggleResponse> toggleStockExchangeActive(@PathVariable Long id) {

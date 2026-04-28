@@ -1,4 +1,4 @@
-package com.banka1.stock_service.service;
+package com.banka1.stock_service.runner;
 
 import com.banka1.stock_service.config.ForexPairSeedProperties;
 import com.banka1.stock_service.config.FuturesContractSeedProperties;

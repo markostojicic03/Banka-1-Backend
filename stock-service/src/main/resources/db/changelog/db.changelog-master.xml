@@ -15,5 +15,6 @@
     <include file="db/changelog/008-create-listing-daily-price-info.sql"/>
     <include file="db/changelog/009-update-listing-market-data.sql"/>
     <include file="db/changelog/010-widen-stock-exchange-currency.sql"/>
+    <include file="db/changelog/011-add-stock-option-market-data.sql"/>
 
 </databaseChangeLog>

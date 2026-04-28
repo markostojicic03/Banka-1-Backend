@@ -1,4 +1,4 @@
-package com.banka1.stock_service.service;
+package com.banka1.stock_service.runner;
 
 import com.banka1.stock_service.domain.Listing;
 import com.banka1.stock_service.domain.ListingType;
@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -32,6 +33,8 @@ import java.util.List;
 public class StockOptionSeedService {
 
     private static final String SOURCE = "built-in starter stock options";
+    private static final BigDecimal ZERO_PRICE = new BigDecimal("0.00000000");
+    private static final long ZERO_VOLUME = 0L;
 
     // Settlement dates: next quarterly expiration cycles
     private static final LocalDate EXPIRY_JUNE   = LocalDate.of(2026, 6, 19);
@@ -115,6 +118,10 @@ public class StockOptionSeedService {
             option.setStrikePrice(new BigDecimal(row.strikePrice()));
             option.setImpliedVolatility(new BigDecimal(row.impliedVolatility()));
             option.setOpenInterest(row.openInterest());
+            option.setLastPrice(ZERO_PRICE);
+            option.setAsk(ZERO_PRICE);
+            option.setBid(ZERO_PRICE);
+            option.setVolume(ZERO_VOLUME);
             option.setSettlementDate(row.settlementDate());
             stockOptionRepository.save(option);
             seedOptionListing(option, stock);

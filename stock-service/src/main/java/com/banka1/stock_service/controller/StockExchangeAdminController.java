@@ -1,7 +1,8 @@
 package com.banka1.stock_service.controller;
 
 import com.banka1.stock_service.dto.StockExchangeImportResponse;
-import com.banka1.stock_service.service.StockExchangeCsvImportService;
+import com.banka1.stock_service.runner.StockExchangeCsvImportService;
+import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -23,6 +24,7 @@ public class StockExchangeAdminController {
      *
      * @return import summary for the executed CSV load
      */
+    @Operation(summary = "Import stock exchanges from CSV")
     @PostMapping("/import")
     @PreAuthorize("hasAnyRole('SUPERVISOR', 'ADMIN', 'SERVICE')")
     public StockExchangeImportResponse importStockExchanges() {

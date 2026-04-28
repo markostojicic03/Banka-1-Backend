@@ -46,6 +46,10 @@ class StockOptionRepositoryTest {
                 new BigDecimal("210.0000"),
                 new BigDecimal("0.24500000"),
                 8_250,
+                new BigDecimal("5.25000000"),
+                new BigDecimal("5.12000000"),
+                new BigDecimal("5.38000000"),
+                1_900L,
                 LocalDate.of(2027, 1, 17)
         );
         stockOptionRepository.saveAndFlush(stockOption);
@@ -58,6 +62,10 @@ class StockOptionRepositoryTest {
         assertEquals(new BigDecimal("210.0000"), persisted.getStrikePrice());
         assertEquals(new BigDecimal("0.24500000"), persisted.getImpliedVolatility());
         assertEquals(8_250, persisted.getOpenInterest());
+        assertEquals(new BigDecimal("5.25000000"), persisted.getLastPrice());
+        assertEquals(new BigDecimal("5.12000000"), persisted.getBid());
+        assertEquals(new BigDecimal("5.38000000"), persisted.getAsk());
+        assertEquals(1_900L, persisted.getVolume());
         assertEquals(LocalDate.of(2027, 1, 17), persisted.getSettlementDate());
     }
 
@@ -75,6 +83,10 @@ class StockOptionRepositoryTest {
                         new BigDecimal("380.0000"),
                         new BigDecimal("0.19850000"),
                         4_200,
+                        new BigDecimal("6.25000000"),
+                        new BigDecimal("6.10000000"),
+                        new BigDecimal("6.40000000"),
+                        1_250L,
                         LocalDate.of(2027, 1, 17)
                 )
         );
@@ -89,6 +101,10 @@ class StockOptionRepositoryTest {
                                 new BigDecimal("385.0000"),
                                 new BigDecimal("0.21000000"),
                                 5_100,
+                                new BigDecimal("6.50000000"),
+                                new BigDecimal("6.33000000"),
+                                new BigDecimal("6.67000000"),
+                                1_500L,
                                 LocalDate.of(2027, 1, 17)
                         )
                 )
@@ -109,6 +125,10 @@ class StockOptionRepositoryTest {
                                 new BigDecimal("900.0000"),
                                 new BigDecimal("0.33000000"),
                                 9_100,
+                                new BigDecimal("12.25000000"),
+                                new BigDecimal("12.00000000"),
+                                new BigDecimal("12.50000000"),
+                                2_200L,
                                 LocalDate.of(2027, 1, 17)
                         )
                 )
@@ -131,6 +151,10 @@ class StockOptionRepositoryTest {
             BigDecimal strikePrice,
             BigDecimal impliedVolatility,
             int openInterest,
+            BigDecimal lastPrice,
+            BigDecimal bid,
+            BigDecimal ask,
+            long volume,
             LocalDate settlementDate
     ) {
         StockOption stockOption = new StockOption();
@@ -140,6 +164,10 @@ class StockOptionRepositoryTest {
         stockOption.setStrikePrice(strikePrice);
         stockOption.setImpliedVolatility(impliedVolatility);
         stockOption.setOpenInterest(openInterest);
+        stockOption.setLastPrice(lastPrice);
+        stockOption.setBid(bid);
+        stockOption.setAsk(ask);
+        stockOption.setVolume(volume);
         stockOption.setSettlementDate(settlementDate);
         return stockOption;
     }

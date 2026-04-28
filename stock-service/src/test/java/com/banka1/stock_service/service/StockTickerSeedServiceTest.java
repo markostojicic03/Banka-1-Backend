@@ -8,6 +8,7 @@ import com.banka1.stock_service.dto.StockTickerSeedResponse;
 import com.banka1.stock_service.repository.ListingRepository;
 import com.banka1.stock_service.repository.StockExchangeRepository;
 import com.banka1.stock_service.repository.StockRepository;
+import com.banka1.stock_service.runner.StockTickerSeedService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;

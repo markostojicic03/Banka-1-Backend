@@ -13,6 +13,10 @@ import java.math.BigDecimal;
  * @param strikePrice strike price
  * @param impliedVolatility implied volatility as a decimal value
  * @param openInterest current open interest
+ * @param last last traded option price
+ * @param bid current bid price
+ * @param ask current ask price
+ * @param volume current traded volume
  * @param inTheMoney indicator showing whether the option is currently in the money
  */
 public record StockOptionDetailsResponse(
@@ -22,6 +26,10 @@ public record StockOptionDetailsResponse(
         BigDecimal strikePrice,
         BigDecimal impliedVolatility,
         Integer openInterest,
+        BigDecimal last,
+        BigDecimal bid,
+        BigDecimal ask,
+        Long volume,
         boolean inTheMoney
 ) {
 }
