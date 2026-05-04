@@ -37,4 +37,7 @@ public interface TransactionalService {
     void transfer(Account sender, Account recipient, BankPaymentDto paymentDto);
 
 
+    void creditTransactional(Account account, BigDecimal amount);
+
+
 }
